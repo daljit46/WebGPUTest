@@ -1,0 +1,35 @@
+name: Build Test
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    
+    steps:
+      - name: Run sccache
+        uses: mozilla-action/sccache@v0.0.3
+      
+      - name: Checkout
+        uses: actions/checkout@v2
+        submodules: true
+
+      - name: Install dependencies
+        run: |
+          if [ ${{ matrix.os }} == 'ubuntu-latest' ]; then
+            sudo apt-get update
+            sudo apt-get install -y cmake ninja-build
+          elif [ ${{ matrix.os }} == 'macos-latest' ]; then
+            brew install cmake ninja
+          fi
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+      
+      - name: Build
+        run: |
+          cmake --build build
