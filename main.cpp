@@ -147,25 +147,68 @@ int main()
 
     std::cout << "Creating shader module..." << std::endl;
     const std::string shaderSource = R"(
+
+        struct VertexInput {
+            @location(0) position: vec2f,
+            @location(1) color: vec3f,
+        };
+
+        struct VertexOutput {
+            @builtin(position) position: vec4f,
+            @location(0) color: vec3f,
+        };
+
         @vertex
-        fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4<f32> {
-            var p = vec2f(0.0, 0.0);
-            if (in_vertex_index == 0u) {
-                p = vec2f(-0.5, -0.5);
-            } else if (in_vertex_index == 1u) {
-                p = vec2f(0.5, -0.5);
-            } else {
-                p = vec2f(0.0, 0.5);
-            }
-            return vec4f(p, 0.0, 1.0);
+        fn vs_main(in: VertexInput) -> VertexOutput {
+            var out: VertexOutput;
+            out.position = vec4f(in.position, 0.0, 1.0);
+            out.color = in.color;
+            return out;
         }
 
         @fragment
-        fn fs_main() -> @location(0) vec4f {
-            return vec4f(0.0, 0.4, 1.0, 1.0);
+        fn fs_main(in: VertexOutput) -> @location(0) vec4f{
+            return vec4f(in.color, 1.0);
         }
     )";
 
+    constexpr uint32_t vertexDataSize = 5;
+
+    std::vector<float> vertexData = {
+        -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+         0.0f,  0.5f, 0.2f, 1.0f, 0.0f,
+         0.5f, -0.5f, 0.0f, 0.0f, 1.0f,
+    };
+    const int vertexCount = static_cast<int>(vertexData.size() / vertexDataSize);
+
+    WGPUBufferDescriptor vertexBufferDesc{};
+    vertexBufferDesc.nextInChain = nullptr;
+    vertexBufferDesc.label = "Vertex buffer";
+    vertexBufferDesc.size = vertexData.size() * sizeof(float);
+    vertexBufferDesc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_Vertex;
+    vertexBufferDesc.mappedAtCreation = false;
+    WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device, &vertexBufferDesc);
+
+    // upload vertex data to the GPU
+    wgpuQueueWriteBuffer(queue, vertexBuffer, 0, vertexData.data(), vertexBufferDesc.size);
+
+    WGPUVertexAttribute positionAttrib{};
+    positionAttrib.shaderLocation = 0;
+    positionAttrib.format = WGPUVertexFormat_Float32x2;
+    positionAttrib.offset = 0;
+
+    WGPUVertexAttribute colorAttrib{};
+    colorAttrib.shaderLocation = 1;
+    colorAttrib.format = WGPUVertexFormat_Float32x3;
+    colorAttrib.offset = 2 * sizeof(float);
+
+    std::vector<WGPUVertexAttribute> vertexAttributes = { positionAttrib, colorAttrib };
+
+    WGPUVertexBufferLayout vertexBufferLayout{};
+    vertexBufferLayout.attributeCount = static_cast<uint32_t>(vertexAttributes.size());
+    vertexBufferLayout.attributes = vertexAttributes.data();
+    vertexBufferLayout.arrayStride = vertexDataSize * sizeof(float);
+    vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
 
     WGPUShaderModuleDescriptor shaderDesc{};
     shaderDesc.nextInChain = nullptr;
@@ -183,8 +226,8 @@ int main()
     WGPURenderPipelineDescriptor pipelineDesc{};
     pipelineDesc.nextInChain = nullptr;
 
-    pipelineDesc.vertex.bufferCount = 0;
-    pipelineDesc.vertex.buffers = nullptr;
+    pipelineDesc.vertex.bufferCount = 1;
+    pipelineDesc.vertex.buffers = &vertexBufferLayout;
     pipelineDesc.vertex.module = shaderModule;
     pipelineDesc.vertex.entryPoint = "vs_main";
     pipelineDesc.vertex.constantCount = 0;
@@ -252,7 +295,7 @@ int main()
         renderPassColorAttachment.resolveTarget = nullptr;
         renderPassColorAttachment.loadOp = WGPULoadOp_Clear;
         renderPassColorAttachment.storeOp = WGPUStoreOp_Store;
-        renderPassColorAttachment.clearValue = WGPUColor{ 0.9, 0.1, 0.2, 1.0 };
+        renderPassColorAttachment.clearValue = WGPUColor{ 0.0, 0.1, 0.2, 1.0 };
 
         WGPURenderPassDescriptor renderPassDesc{};
         renderPassDesc.nextInChain = nullptr;
@@ -265,7 +308,8 @@ int main()
 
         WGPURenderPassEncoder renderPass = wgpuCommandEncoderBeginRenderPass(encoder, &renderPassDesc);
         wgpuRenderPassEncoderSetPipeline(renderPass, pipeline);
-        wgpuRenderPassEncoderDraw(renderPass, 3, 1, 0, 0);
+        wgpuRenderPassEncoderSetVertexBuffer(renderPass, 0, vertexBuffer, 0, vertexData.size() * sizeof(float));
+        wgpuRenderPassEncoderDraw(renderPass, vertexCount, 1, 0, 0);
         wgpuRenderPassEncoderEnd(renderPass);
 
 
