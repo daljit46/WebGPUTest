@@ -1,67 +1,12 @@
+#include "utils.h"
+
 #include <GLFW/glfw3.h>
 #include <webgpu/webgpu.h>
 #include <webgpu/webgpu_glfw.h>
 #include <glfw3webgpu.h>
 
 #include <iostream>
-#include <cassert>
 #include <vector>
-
-
-WGPUAdapter requestAdapter(WGPUInstance instance, const WGPURequestAdapterOptions *options)
-{
-    struct UserData {
-        WGPUAdapter adapter = nullptr;
-        bool requestEnded = false;
-    };
-
-    UserData userData;
-
-    auto onAdapterRequestEnded = [](WGPURequestAdapterStatus status,
-                                    WGPUAdapter adapter,
-                                    const char *message,
-                                    void *pUserData){
-        UserData& userData = *reinterpret_cast<UserData*>(pUserData);
-        if (status == WGPURequestAdapterStatus_Success) {
-            userData.adapter = adapter;
-        } else {
-            std::cout << "Could not get WebGPU adapter: " << message << std::endl;
-        }
-        userData.requestEnded = true;
-    };
-    wgpuInstanceRequestAdapter(instance, options, onAdapterRequestEnded, (void*)&userData);
-    assert(userData.requestEnded);
-
-    return userData.adapter;
-}
-
-WGPUDevice requestDevice(WGPUAdapter adapter, const WGPUDeviceDescriptor *descriptor)
-{
-    struct UserData {
-        WGPUDevice device = nullptr;
-        bool requestEnded = false;
-    };
-
-    UserData userData;
-
-    auto onDeviceRequestEnded = [](WGPURequestDeviceStatus status,
-                                   WGPUDevice device,
-                                   const char *message,
-                                   void *pUserData){
-        UserData& userData = *reinterpret_cast<UserData*>(pUserData);
-        if (status == WGPURequestDeviceStatus_Success) {
-            userData.device = device;
-        } else {
-            std::cout << "Could not get WebGPU device: " << message << std::endl;
-        }
-        userData.requestEnded = true;
-    };
-
-    wgpuAdapterRequestDevice(adapter, descriptor, onDeviceRequestEnded, (void*)&userData);
-    assert(userData.requestEnded);
-
-    return userData.device;
-}
 
 
 int main()
@@ -99,7 +44,7 @@ int main()
     adapterOpts.nextInChain = nullptr;
     adapterOpts.compatibleSurface = surface;
 
-    WGPUAdapter adapter = requestAdapter(instance, &adapterOpts);
+    WGPUAdapter adapter = Utils::requestAdapter(instance, &adapterOpts);
 
     std::vector<WGPUFeatureName> featuresList;
     featuresList.resize(wgpuAdapterEnumerateFeatures(adapter, nullptr));
@@ -113,7 +58,7 @@ int main()
     deviceDesc.defaultQueue.nextInChain = nullptr;
     deviceDesc.defaultQueue.label = "Default queue";
 
-    WGPUDevice device = requestDevice(adapter, &deviceDesc);
+    WGPUDevice device = Utils::requestDevice(adapter, &deviceDesc);
     if(!device) {
         std::cerr << "Failed to get a device!" << std::endl;
         return -1;

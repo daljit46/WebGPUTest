@@ -53,7 +53,11 @@ set(IMGUI_SOURCES
     imgui/imgui_tables.cpp
 )
 
-add_executable(WebGPUTest main.cpp ${IMGUI_SOURCES})
+add_executable(WebGPUTest 
+    main.cpp
+    utils.cpp
+    ${IMGUI_SOURCES}
+)
 
 target_link_libraries(WebGPUTest PRIVATE
     webgpu_dawn
