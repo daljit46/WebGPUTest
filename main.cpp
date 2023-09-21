@@ -90,33 +90,6 @@ int main()
     WGPUSwapChain swapChain = wgpuDeviceCreateSwapChain(device, surface, &swapChainDesc);
     std::cout << "Swapchain: " << swapChain << std::endl;
 
-    std::cout << "Creating shader module..." << std::endl;
-    const std::string shaderSource = R"(
-
-        struct VertexInput {
-            @location(0) position: vec2f,
-            @location(1) color: vec3f,
-        };
-
-        struct VertexOutput {
-            @builtin(position) position: vec4f,
-            @location(0) color: vec3f,
-        };
-
-        @vertex
-        fn vs_main(in: VertexInput) -> VertexOutput {
-            var out: VertexOutput;
-            out.position = vec4f(in.position, 0.0, 1.0);
-            out.color = in.color;
-            return out;
-        }
-
-        @fragment
-        fn fs_main(in: VertexOutput) -> @location(0) vec4f{
-            return vec4f(in.color, 1.0);
-        }
-    )";
-
     constexpr uint32_t vertexDataSize = 5;
 
     std::vector<float> vertexData = {
@@ -155,17 +128,8 @@ int main()
     vertexBufferLayout.arrayStride = vertexDataSize * sizeof(float);
     vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
 
-    WGPUShaderModuleDescriptor shaderDesc{};
-    shaderDesc.nextInChain = nullptr;
 
-    WGPUShaderModuleWGSLDescriptor shaderCodeDesc{};
-    shaderCodeDesc.chain.next = nullptr;
-    shaderCodeDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    shaderDesc.nextInChain = &shaderCodeDesc.chain;
-
-    shaderCodeDesc.code = shaderSource.data();
-
-    WGPUShaderModule shaderModule = wgpuDeviceCreateShaderModule(device, &shaderDesc);
+    WGPUShaderModule shaderModule = Utils::loadShaderModule("./shaders/shader.wgsl", device);
     std::cout << "Shader module: " << shaderModule << std::endl;
 
     WGPURenderPipelineDescriptor pipelineDesc{};

@@ -1,6 +1,7 @@
 #include "utils.h"
 #include <iostream>
 #include <cassert>
+#include <fstream>
 
 namespace Utils {
 WGPUAdapter requestAdapter(WGPUInstance instance,
@@ -56,5 +57,26 @@ WGPUDevice requestDevice(WGPUAdapter adapter, const WGPUDeviceDescriptor *descri
     assert(userData.requestEnded);
 
     return userData.device;
+}
+
+WGPUShaderModule loadShaderModule(const std::filesystem::path& filePath, WGPUDevice device)
+{
+    std::ifstream file(filePath);
+    if(!file.is_open()){
+        std::cerr << "Could not open file: " << filePath << std::endl;
+        return nullptr;
+    }
+    file.seekg(0, std::ios::end);
+    std::vector<char> buffer(file.tellg());
+    file.seekg(0);
+    file.read(buffer.data(), buffer.size());
+
+    WGPUShaderModuleWGSLDescriptor shaderCodeDesc = {};
+    shaderCodeDesc.chain.next = nullptr;
+    shaderCodeDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
+    shaderCodeDesc.code = buffer.data();
+    WGPUShaderModuleDescriptor shaderDesc{};
+    shaderDesc.nextInChain = &shaderCodeDesc.chain;
+    return wgpuDeviceCreateShaderModule(device, &shaderDesc);
 }
 } // namespace Utils

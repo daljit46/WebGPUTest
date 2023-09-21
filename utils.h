@@ -1,6 +1,7 @@
-
 #pragma once
+
 #include <webgpu/webgpu.h>
+#include <filesystem>
 
 namespace Utils {
 WGPUAdapter requestAdapter(WGPUInstance instance,
@@ -8,4 +9,8 @@ WGPUAdapter requestAdapter(WGPUInstance instance,
 
 WGPUDevice requestDevice(WGPUAdapter adapter,
                          const WGPUDeviceDescriptor *descriptor);
+
+WGPUShaderModule loadShaderModule(const std::filesystem::path& filePath,
+                                  WGPUDevice device);
+
 } // namespace Utils

@@ -70,6 +70,16 @@ target_include_directories(WebGPUTest PRIVATE
     imgui
 )
 
+add_custom_target(Shaders SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shader.wgsl
+)
+
+add_custom_command(TARGET WebGPUTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+        "$<TARGET_FILE_DIR:WebGPUTest>/shaders"
+)
+
 install(TARGETS WebGPUTest
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
