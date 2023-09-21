@@ -7,28 +7,36 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_SIZE: "2G"
+
     steps:
-      - name: Run sccache
-        uses: mozilla-action/sccache@v0.0.3
-      
       - name: Checkout
         uses: actions/checkout@v2
-        submodules: true
-
+        with:
+          submodules: true
+          
+      - name: Run sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      
       - name: Install dependencies
         run: |
           if [ ${{ matrix.os }} == 'ubuntu-latest' ]; then
-            sudo apt-get update
-            sudo apt-get install -y cmake ninja-build
+            sudo apt update
+            sudo apt install ninja-build libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev libgl-dev libx11-xcb-dev
           elif [ ${{ matrix.os }} == 'macos-latest' ]; then
-            brew install cmake ninja
+            brew install ninja
           fi
       - name: Configure
-        run: |
-          cmake -B build -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        run: >
+          cmake 
+          -B build
+          -G Ninja
       
       - name: Build
         run: |
