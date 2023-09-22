@@ -74,11 +74,11 @@ add_custom_target(Shaders SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shader.wgsl
 )
 
-add_custom_command(TARGET WebGPUTest POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
-        "$<TARGET_FILE_DIR:WebGPUTest>/shaders"
-)
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders")
+
 
 install(TARGETS WebGPUTest
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
