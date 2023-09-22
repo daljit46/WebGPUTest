@@ -217,7 +217,7 @@ int main()
     fragmentState.targets = &colorTarget;
 
     pipelineDesc.depthStencil = nullptr;
-    pipelineDesc.layout = nullptr;
+    pipelineDesc.layout = pipelineLayout;
 
     pipelineDesc.multisample.count = 1;
     pipelineDesc.multisample.mask = ~0u;
