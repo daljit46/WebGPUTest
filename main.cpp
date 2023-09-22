@@ -107,9 +107,6 @@ int main()
     vertexBufferDesc.mappedAtCreation = false;
     WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device, &vertexBufferDesc);
 
-    // upload vertex data to the GPU
-    wgpuQueueWriteBuffer(queue, vertexBuffer, 0, vertexData.data(), vertexBufferDesc.size);
-
     WGPUVertexAttribute positionAttrib{};
     positionAttrib.shaderLocation = 0;
     positionAttrib.format = WGPUVertexFormat_Float32x2;
@@ -128,6 +125,51 @@ int main()
     vertexBufferLayout.arrayStride = vertexDataSize * sizeof(float);
     vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
 
+    // upload vertex data to the GPU
+    wgpuQueueWriteBuffer(queue, vertexBuffer, 0, vertexData.data(), vertexBufferDesc.size);
+
+    // Create uniform buffer
+    WGPUBufferDescriptor uniformBufferDesc {};
+    uniformBufferDesc.nextInChain = nullptr;
+    uniformBufferDesc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_Uniform;
+    uniformBufferDesc.size = sizeof(float);
+    uniformBufferDesc.mappedAtCreation = false;
+    WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device, &uniformBufferDesc);
+
+    float currentTime = 1.0f;
+    wgpuQueueWriteBuffer(queue, uniformBuffer, 0, &currentTime, uniformBufferDesc.size);
+
+    WGPUBindGroupLayoutEntry bindingLayout = Utils::createDefaultBindingLayout();
+    bindingLayout.binding = 0;
+    bindingLayout.visibility = WGPUShaderStage_Vertex;
+    bindingLayout.buffer.type = WGPUBufferBindingType_Uniform;
+    bindingLayout.buffer.minBindingSize = sizeof(float);
+
+    WGPUBindGroupLayoutDescriptor bindGroupLayoutDesc {};
+    bindGroupLayoutDesc.nextInChain = nullptr;
+    bindGroupLayoutDesc.entryCount = 1;
+    bindGroupLayoutDesc.entries = &bindingLayout;
+    WGPUBindGroupLayout bindingGroupLayout = wgpuDeviceCreateBindGroupLayout(device, &bindGroupLayoutDesc);
+
+    WGPUPipelineLayoutDescriptor pipelineLayoutDesc {};
+    pipelineLayoutDesc.nextInChain = nullptr;
+    pipelineLayoutDesc.bindGroupLayoutCount = 1;
+    pipelineLayoutDesc.bindGroupLayouts = &bindingGroupLayout;
+    WGPUPipelineLayout pipelineLayout = wgpuDeviceCreatePipelineLayout(device, &pipelineLayoutDesc);
+
+    WGPUBindGroupEntry binding {};
+    binding.nextInChain = nullptr;
+    binding.binding = 0;
+    binding.buffer = uniformBuffer;
+    binding.offset = 0;
+    binding.size = sizeof(float);
+
+    WGPUBindGroupDescriptor bindGroupDesc {};
+    bindGroupDesc.nextInChain = nullptr;
+    bindGroupDesc.layout = bindingGroupLayout;
+    bindGroupDesc.entryCount = bindGroupLayoutDesc.entryCount;
+    bindGroupDesc.entries = &binding;
+    WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device, &bindGroupDesc);
 
     WGPUShaderModule shaderModule = Utils::loadShaderModule("./shaders/shader.wgsl", device);
     std::cout << "Shader module: " << shaderModule << std::endl;
@@ -214,10 +256,14 @@ int main()
         renderPassDesc.timestampWriteCount = 0;
         renderPassDesc.timestampWrites = nullptr;
 
+        // Update uniform buffer
+        float t = static_cast<float>(glfwGetTime()) * 2;
+        wgpuQueueWriteBuffer(queue, uniformBuffer, 0, &t, sizeof(float));
 
         WGPURenderPassEncoder renderPass = wgpuCommandEncoderBeginRenderPass(encoder, &renderPassDesc);
         wgpuRenderPassEncoderSetPipeline(renderPass, pipeline);
         wgpuRenderPassEncoderSetVertexBuffer(renderPass, 0, vertexBuffer, 0, vertexData.size() * sizeof(float));
+        wgpuRenderPassEncoderSetBindGroup(renderPass, 0, bindGroup, 0, nullptr);
         wgpuRenderPassEncoderDraw(renderPass, vertexCount, 1, 0, 0);
         wgpuRenderPassEncoderEnd(renderPass);
 

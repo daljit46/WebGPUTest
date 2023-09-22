@@ -79,4 +79,27 @@ WGPUShaderModule loadShaderModule(const std::filesystem::path& filePath, WGPUDev
     shaderDesc.nextInChain = &shaderCodeDesc.chain;
     return wgpuDeviceCreateShaderModule(device, &shaderDesc);
 }
+
+WGPUBindGroupLayoutEntry createDefaultBindingLayout ()
+{
+    WGPUBindGroupLayoutEntry bindingLayout;
+    bindingLayout.buffer.nextInChain = nullptr;
+    bindingLayout.buffer.type = WGPUBufferBindingType_Undefined;
+    bindingLayout.buffer.hasDynamicOffset = false;
+
+    bindingLayout.sampler.nextInChain = nullptr;
+    bindingLayout.sampler.type = WGPUSamplerBindingType_Undefined;
+
+    bindingLayout.storageTexture.nextInChain = nullptr;
+    bindingLayout.storageTexture.access = WGPUStorageTextureAccess_Undefined;
+    bindingLayout.storageTexture.format = WGPUTextureFormat_Undefined;
+    bindingLayout.storageTexture.viewDimension = WGPUTextureViewDimension_Undefined;
+
+    bindingLayout.texture.nextInChain = nullptr;
+    bindingLayout.texture.multisampled = false;
+    bindingLayout.texture.sampleType = WGPUTextureSampleType_Undefined;
+    bindingLayout.texture.viewDimension = WGPUTextureViewDimension_Undefined;
+
+    return bindingLayout;
+}
 } // namespace Utils
