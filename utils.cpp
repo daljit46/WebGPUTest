@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cassert>
 #include <fstream>
+#include <vector>
 
 namespace Utils {
 WGPUAdapter requestAdapter(WGPUInstance instance,
