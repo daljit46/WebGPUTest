@@ -11,6 +11,8 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerCache)
 use_compiler_cache()
 
+find_package(Threads REQUIRED)
+
 set(DAWN_FETCH_DEPENDENCIES ON)
 
 if (APPLE)
@@ -65,6 +67,7 @@ target_link_libraries(WebGPUTest PRIVATE
     webgpu_cpp
     webgpu_glfw
     glfw3webgpu
+    Threads::Threads
 )
 
 target_include_directories(WebGPUTest PRIVATE
