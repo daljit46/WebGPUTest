@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
 
+#include <array>
 #include <exception>
 #include <iostream>
 #include <vector>
@@ -17,6 +18,13 @@ void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue) {
             std::cout << " (" << message << ")";
         std::cout << std::endl;
     };
+    auto onDeviceLost = [](WGPUDeviceLostReason reason, char const* message, void*){
+        std::cout << "Device lost error: reason" << reason;
+        if (message)
+            std::cout << " (" << message << ")";
+        std::cout << std::endl;
+    };
+    wgpuDeviceSetDeviceLostCallback(device, onDeviceLost, nullptr);
     wgpuDeviceSetUncapturedErrorCallback(device, onDeviceError,
                                          nullptr /* pUserData */);
 
@@ -142,12 +150,16 @@ Application::Application()
     // Upload vertex and uniform data to the GPU
     constexpr uint32_t vertexDataSize = 5;
 
-    std::vector<float> vertexData = {
-        -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
-        0.0f,  0.5f, 0.2f, 1.0f, 0.0f,
-        0.5f, -0.5f, 0.0f, 0.0f, 1.0f,
+    std::array<float, 20> vertexData = {
+        // x,   y,     r,   g,   b
+        -1.0F, -1.0F, 1.0F, 0.0F, 0.0F,
+         1.0F, 1.0F,  0.0F, 1.0F, 0.0F,
+        -1.0F, 1.0F,  0.0F, 0.0F, 1.0F,
+         1.0F, -1.0F, 1.0F, 1.0F, 0.0F
     };
+    std::array<uint16_t, 6> indexData = { 0, 1, 2, 0, 3, 1 };
     m_vertexCount = static_cast<int>(vertexData.size() / vertexDataSize);
+    m_indexCount = static_cast<int>(indexData.size());
 
     WGPUBufferDescriptor vertexBufferDesc{};
     vertexBufferDesc.nextInChain = nullptr;
@@ -156,6 +168,22 @@ Application::Application()
     vertexBufferDesc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_Vertex;
     vertexBufferDesc.mappedAtCreation = false;
     m_vertexBuffer = wgpuDeviceCreateBuffer(m_device, &vertexBufferDesc);
+
+    WGPUBufferDescriptor indexBufferDesc{};
+    indexBufferDesc.nextInChain = nullptr;
+    indexBufferDesc.label = "Index buffer";
+    indexBufferDesc.size = indexData.size() * sizeof(uint16_t);
+    indexBufferDesc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_Index;
+    indexBufferDesc.mappedAtCreation = false;
+    m_indexBuffer = wgpuDeviceCreateBuffer(m_device, &indexBufferDesc);
+
+    WGPUBufferDescriptor uniformBufferDesc {};
+    uniformBufferDesc.nextInChain = nullptr;
+    uniformBufferDesc.label = "Uniform buffer";
+    uniformBufferDesc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_Uniform;
+    uniformBufferDesc.size = sizeof(Uniform);
+    uniformBufferDesc.mappedAtCreation = false;
+    m_uniformBuffer = wgpuDeviceCreateBuffer(m_device, &uniformBufferDesc);
 
     WGPUVertexAttribute positionAttrib{};
     positionAttrib.shaderLocation = 0;
@@ -175,24 +203,12 @@ Application::Application()
     vertexBufferLayout.arrayStride = vertexDataSize * sizeof(float);
     vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
 
-    wgpuQueueWriteBuffer(m_queue, m_vertexBuffer, 0, vertexData.data(), vertexBufferDesc.size);
-
-    WGPUBufferDescriptor uniformBufferDesc {};
-    uniformBufferDesc.nextInChain = nullptr;
-    uniformBufferDesc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_Uniform;
-    uniformBufferDesc.size = sizeof(float);
-    uniformBufferDesc.mappedAtCreation = false;
-    m_uniformBuffer = wgpuDeviceCreateBuffer(m_device, &uniformBufferDesc);
-
-    float currentTime = 1.0f;
-    wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &currentTime, uniformBufferDesc.size);
-
     // Create binding group
     WGPUBindGroupLayoutEntry bindingLayout = Utils::createDefaultBindingLayout();
     bindingLayout.binding = 0;
-    bindingLayout.visibility = WGPUShaderStage_Vertex;
+    bindingLayout.visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
     bindingLayout.buffer.type = WGPUBufferBindingType_Uniform;
-    bindingLayout.buffer.minBindingSize = sizeof(float);
+    bindingLayout.buffer.minBindingSize = sizeof(Uniform);
 
     WGPUBindGroupLayoutDescriptor bindGroupLayoutDesc {};
     bindGroupLayoutDesc.nextInChain = nullptr;
@@ -211,7 +227,7 @@ Application::Application()
     binding.binding = 0;
     binding.buffer = m_uniformBuffer;
     binding.offset = 0;
-    binding.size = sizeof(float);
+    binding.size = sizeof(Uniform);
 
     WGPUBindGroupDescriptor bindGroupDesc {};
     bindGroupDesc.nextInChain = nullptr;
@@ -219,6 +235,10 @@ Application::Application()
     bindGroupDesc.entryCount = bindGroupLayoutDesc.entryCount;
     bindGroupDesc.entries = &binding;
     m_bindGroup = wgpuDeviceCreateBindGroup(m_device, &bindGroupDesc);
+
+    wgpuQueueWriteBuffer(m_queue, m_vertexBuffer, 0, vertexData.data(), vertexBufferDesc.size);
+    wgpuQueueWriteBuffer(m_queue, m_indexBuffer, 0, indexData.data(), indexBufferDesc.size);
+    wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &m_uniforms, uniformBufferDesc.size);
 
     // Load shaders and setup render pipeline
     m_shaderModule = Utils::loadShaderModule("./shaders/shader.wgsl", m_device);
@@ -314,13 +334,15 @@ void Application::onFrame()
 
     // Update uniform buffer
     float t = static_cast<float>(glfwGetTime()) * 2;
-    wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &t, sizeof(float));
+    m_uniforms.scale = std::sin(t);
+    wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &m_uniforms, sizeof(Uniform));
 
     WGPURenderPassEncoder renderPass = wgpuCommandEncoderBeginRenderPass(encoder, &renderPassDesc);
     wgpuRenderPassEncoderSetPipeline(renderPass, m_renderPipeline);
     wgpuRenderPassEncoderSetVertexBuffer(renderPass, 0, m_vertexBuffer, 0, m_vertexCount * 5 * sizeof(float));
+    wgpuRenderPassEncoderSetIndexBuffer(renderPass, m_indexBuffer, WGPUIndexFormat_Uint16, 0, m_indexCount * sizeof(uint16_t));
     wgpuRenderPassEncoderSetBindGroup(renderPass, 0, m_bindGroup, 0, nullptr);
-    wgpuRenderPassEncoderDraw(renderPass, m_vertexCount, 1, 0, 0);
+    wgpuRenderPassEncoderDrawIndexed(renderPass, m_indexCount, 1, 0, 0, 0);
     wgpuRenderPassEncoderEnd(renderPass);
 
 
@@ -364,8 +386,8 @@ void Application::buildSwapchain()
 
     WGPUSwapChainDescriptor swapChainDesc{};
     swapChainDesc.nextInChain = nullptr;
-    swapChainDesc.width = 640;
-    swapChainDesc.height = 480;
+    swapChainDesc.width = width;
+    swapChainDesc.height = height;
 
     m_swapChainFormat = WGPUTextureFormat_BGRA8Unorm;
     swapChainDesc.format = m_swapChainFormat;
@@ -373,6 +395,10 @@ void Application::buildSwapchain()
     swapChainDesc.presentMode = WGPUPresentMode_Fifo;
     m_swapChain = wgpuDeviceCreateSwapChain(m_device, m_surface, &swapChainDesc);
     std::cout << "Swapchain: " << m_swapChain << std::endl;
+
+    if(!m_swapChain) {
+        throw std::runtime_error("Failed to create swapChain!");
+    }
 }
 
 void Application::onMouseMove(double x, double y) {
