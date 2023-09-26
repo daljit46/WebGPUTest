@@ -15,6 +15,10 @@ public:
     void onFinish();
 
     void onResize();
+
+    void onMouseMove(double x, double y);
+
+    void onMouseButton(int button, int action, int mods);
 private:
     void buildSwapchain();
 

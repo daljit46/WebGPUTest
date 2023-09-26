@@ -9,32 +9,70 @@
 #include <vector>
 
 namespace {
-void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue)
-{
-    auto onDeviceError = [](WGPUErrorType type, char const* message, void* /* pUserData */) {
+void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue) {
+    auto onDeviceError = [](WGPUErrorType type, char const *message,
+                            void * /* pUserData */) {
         std::cout << "Uncaptured device error: type " << type;
-        if (message) std::cout << " (" << message << ")";
+        if (message)
+            std::cout << " (" << message << ")";
         std::cout << std::endl;
     };
-    wgpuDeviceSetUncapturedErrorCallback(device, onDeviceError, nullptr /* pUserData */);
+    wgpuDeviceSetUncapturedErrorCallback(device, onDeviceError,
+                                         nullptr /* pUserData */);
 
-    auto onQueueWorkDone = [](WGPUQueueWorkDoneStatus status, void* /* pUserData */) {
+    auto onQueueWorkDone = [](WGPUQueueWorkDoneStatus status,
+                              void * /* pUserData */) {
         std::cout << "Queued work finished with status: " << status << std::endl;
     };
-    wgpuQueueOnSubmittedWorkDone(queue, 0, onQueueWorkDone, nullptr /* pUserData */);
+    wgpuQueueOnSubmittedWorkDone(queue, 0, onQueueWorkDone,
+                                 nullptr /* pUserData */);
 }
 
-void onWindowResize(GLFWwindow* window, int /* width */, int /* height */) {
+void onWindowResize(GLFWwindow *window, int /* width */, int /* height */) {
     // We know that even though from GLFW's point of view this is
     // "just a pointer", in our case it is always a pointer to an
     // instance of the class `Application`
-    auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+    auto that = reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
 
     // Call the actual class-member callback
-    if (that != nullptr) that->onResize();
+    if (that != nullptr)
+        that->onResize();
 }
 
+void setGLFWcallbacks(GLFWwindow *window) {
+    auto onMouseMove = [](GLFWwindow *window, double x, double y) {
+        auto that =
+            reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+        if (that != nullptr)
+            that->onMouseMove(x, y);
+    };
+    glfwSetCursorPosCallback(window, onMouseMove);
+
+    auto onMouseButton = [](GLFWwindow *window, int button, int action,
+                            int /* mods */) {
+        if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+            double x, y;
+            glfwGetCursorPos(window, &x, &y);
+            auto that =
+                reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+            if (that != nullptr)
+                that->onMouseButton(button, action, 0);
+        }
+    };
+
+    glfwSetMouseButtonCallback(window, onMouseButton);
+
+    auto onWindowResize = [](GLFWwindow *window, int width, int height) {
+        auto that =
+            reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+        if (that != nullptr)
+            that->onResize();
+    };
+
+    glfwSetFramebufferSizeCallback(window, onWindowResize);
 }
+
+} // namespace
 
 Application::Application()
 {
@@ -335,4 +373,12 @@ void Application::buildSwapchain()
     swapChainDesc.presentMode = WGPUPresentMode_Fifo;
     m_swapChain = wgpuDeviceCreateSwapChain(m_device, m_surface, &swapChainDesc);
     std::cout << "Swapchain: " << m_swapChain << std::endl;
+}
+
+void Application::onMouseMove(double x, double y) {
+    //   std::cout << "Mouse moved to (" << x << ", " << y << ")" << std::endl;
+}
+
+void Application::onMouseButton(int button, int action, int mods) {
+    std::cout << "Mouse button " << button << " was " << action << std::endl;
 }
