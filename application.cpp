@@ -127,12 +127,27 @@ Application::Application()
     featuresList.resize(wgpuAdapterEnumerateFeatures(m_adapter, nullptr));
     wgpuAdapterEnumerateFeatures(m_adapter, featuresList.data());
 
+    // Setup limits
+    WGPUSupportedLimits supportedLimits {};
+    wgpuAdapterGetLimits(m_adapter, &supportedLimits);
+
+    WGPURequiredLimits requiredLimits {};
+    requiredLimits.limits.maxVertexAttributes = 2;
+    requiredLimits.limits.maxVertexBuffers = 1;
+    requiredLimits.limits.maxBufferSize = 5 * 4 * sizeof(float);
+    requiredLimits.limits.maxVertexBufferArrayStride = 5 * sizeof(float);
+    requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
+    requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
+    requiredLimits.limits.maxBindGroups = 1;
+    requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
+    requiredLimits.limits.maxUniformBufferBindingSize = 16 * sizeof(float);
+
     // Get logical device and queue
     WGPUDeviceDescriptor deviceDesc{};
     deviceDesc.nextInChain = nullptr;
     deviceDesc.label = "Device";
     deviceDesc.requiredFeatureCount = 0;
-    deviceDesc.requiredLimits = nullptr;
+    deviceDesc.requiredLimits = &requiredLimits;
     deviceDesc.defaultQueue.nextInChain = nullptr;
     deviceDesc.defaultQueue.label = "Default queue";
 
