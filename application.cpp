@@ -206,6 +206,7 @@ Application::Application()
 
     // Create binding group
     WGPUBindGroupLayoutEntry bindingLayout = Utils::createDefaultBindingLayout();
+    bindingLayout.nextInChain = nullptr;
     bindingLayout.binding = 0;
     bindingLayout.visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
     bindingLayout.buffer.type = WGPUBufferBindingType_Uniform;
