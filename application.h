@@ -44,4 +44,5 @@ private:
     GLFWwindow *m_window = nullptr;
     int m_vertexCount = 0;
     int m_indexCount = 0;
+    double m_previousFrameTime = 0.0;
 };

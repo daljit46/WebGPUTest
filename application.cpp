@@ -312,7 +312,7 @@ Application::Application()
 
     m_renderPipeline = wgpuDeviceCreateRenderPipeline(m_device, &pipelineDesc);
     std::cout << "Render pipeline: " << m_renderPipeline << std::endl;
-
+    m_previousFrameTime = glfwGetTime();
 }
 
 bool Application::isRunning() const
@@ -322,6 +322,10 @@ bool Application::isRunning() const
 
 void Application::onFrame()
 {
+    double currentFrameTime = glfwGetTime();
+    double deltaTime = currentFrameTime - m_previousFrameTime;
+    m_previousFrameTime = currentFrameTime;
+    std::cout << "Frame time: " << deltaTime << std::endl;
     glfwPollEvents();
     WGPUTextureView nextTexture = wgpuSwapChainGetCurrentTextureView(m_swapChain);
     if (!nextTexture) {
