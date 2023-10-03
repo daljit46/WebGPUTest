@@ -7,6 +7,7 @@
 #include <array>
 #include <exception>
 #include <iostream>
+#include <math.h>
 #include <vector>
 
 namespace {
