@@ -1,8 +1,7 @@
 struct Uniforms {
-    scale: f32,
     center: vec2f,
+    scale: f32,
 };
-@group(0) @binding(0) var<uniform> uniformData: Uniforms;
 
 struct VertexInput {
     @location(0) position: vec2f,
@@ -13,6 +12,8 @@ struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) color: vec3f,
 };
+
+@group(0) @binding(0) var<uniform> uUniformData: Uniforms;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -67,8 +68,8 @@ fn location_color(c: vec2f) -> vec3f {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f{
-    var c = ((in.position.xy / 600) - vec2f(0.5, 0.5))  * 0.5;
-    var color = location_color(vec2f(c.x, -c.y));
+    let c = ((in.position.xy / 1000)) * uUniformData.scale + vec2f(0.3, 0.5);
+    let color = location_color(vec2f(c.x, -c.y));
 
     return vec4f(color, 1.0);
 }

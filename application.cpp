@@ -10,6 +10,7 @@
 #include <math.h>
 #include <vector>
 
+
 namespace {
 void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue) {
     auto onDeviceError = [](WGPUErrorType type, char const *message,
@@ -99,6 +100,7 @@ Application::Application()
         glfwTerminate();
         throw std::runtime_error("Failed to open window!");
     }
+    glfwSetWindowUserPointer(m_window, this);
     glfwSetFramebufferSizeCallback(m_window, onWindowResize);
 
     // Create WGPU instance
@@ -201,6 +203,10 @@ Application::Application()
     uniformBufferDesc.mappedAtCreation = false;
     m_uniformBuffer = wgpuDeviceCreateBuffer(m_device, &uniformBufferDesc);
 
+    wgpuQueueWriteBuffer(m_queue, m_vertexBuffer, 0, vertexData.data(), vertexBufferDesc.size);
+    wgpuQueueWriteBuffer(m_queue, m_indexBuffer, 0, indexData.data(), indexBufferDesc.size);
+    wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &m_uniforms, sizeof(Uniform));
+
     WGPUVertexAttribute positionAttrib{};
     positionAttrib.shaderLocation = 0;
     positionAttrib.format = WGPUVertexFormat_Float32x2;
@@ -253,9 +259,6 @@ Application::Application()
     bindGroupDesc.entries = &binding;
     m_bindGroup = wgpuDeviceCreateBindGroup(m_device, &bindGroupDesc);
 
-    wgpuQueueWriteBuffer(m_queue, m_vertexBuffer, 0, vertexData.data(), vertexBufferDesc.size);
-    wgpuQueueWriteBuffer(m_queue, m_indexBuffer, 0, indexData.data(), indexBufferDesc.size);
-    wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &m_uniforms, uniformBufferDesc.size);
 
     // Load shaders and setup render pipeline
     m_shaderModule = Utils::loadShaderModule("./shaders/shader.wgsl", m_device);
@@ -355,7 +358,12 @@ void Application::onFrame()
 
     // Update uniform buffer
     float t = static_cast<float>(glfwGetTime()) * 2;
-    m_uniforms.scale = std::sin(t);
+    m_uniforms.scale = std::abs(std::sin(t/12));
+
+    std::cout << "Uniforms: \n";
+    std::cout << "  scale: " << m_uniforms.scale << std::endl;
+    std::cout <<  " center: " << m_uniforms.center[0] << ", " << m_uniforms.center[1] << std::endl;
+
     wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &m_uniforms, sizeof(Uniform));
 
     WGPURenderPassEncoder renderPass = wgpuCommandEncoderBeginRenderPass(encoder, &renderPassDesc);
@@ -376,6 +384,9 @@ void Application::onFrame()
     WGPUCommandBuffer command = wgpuCommandEncoderFinish(encoder, &cmdBufferDescriptor);
     wgpuQueueSubmit(m_queue, 1, &command);
     wgpuSwapChainPresent(m_swapChain);
+
+    // Check for pending errors
+    wgpuDeviceTick(m_device);
 }
 
 void Application::onFinish()
@@ -397,6 +408,8 @@ void Application::onResize()
 
 void Application::buildSwapchain()
 {
+    std::cout << "Buildig swap chain" << std::endl;
+
     int width, height;
     glfwGetFramebufferSize(m_window, &width, &height);
 

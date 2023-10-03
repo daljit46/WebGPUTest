@@ -24,9 +24,14 @@ private:
     void buildSwapchain();
 
     struct Uniform {
-        float scale = 1.0F;
-        std::array<float, 2> center = { 0.5F, 0.5F };
+        std::array<float, 2> center = { 0.0F, 0.0F }; // 8 bytes
+        float scale = 1.0F; // 4 bytes
+        // add padding to make the size of the struct to be multiple of 8 bytes
+        // this is required by the WebGPU spec
+        float padding; // bytes
     };
+    static_assert(sizeof(Uniform) % sizeof(std::array<float, 2>) == 0);
+
     Uniform m_uniforms;
     WGPUInstance m_instance = nullptr;
     WGPUAdapter m_adapter = nullptr;
@@ -44,5 +49,6 @@ private:
     GLFWwindow *m_window = nullptr;
     int m_vertexCount = 0;
     int m_indexCount = 0;
+
     double m_previousFrameTime = 0.0;
 };
