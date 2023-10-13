@@ -68,7 +68,7 @@ WGPUShaderModule loadShaderModule(const std::filesystem::path& filePath, WGPUDev
         return nullptr;
     }
     file.seekg(0, std::ios::end);
-    std::vector<char> buffer(file.tellg());
+    std::string buffer(file.tellg(), ' ');
     file.seekg(0);
     file.read(buffer.data(), buffer.size());
 
