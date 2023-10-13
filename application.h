@@ -25,10 +25,10 @@ private:
 
     struct Uniform {
         std::array<float, 2> center = { 0.0F, 0.0F }; // 8 bytes
-        float scale = 1.0F; // 4 bytes
-        // add padding to make the size of the struct to be multiple of 8 bytes
-        // this is required by the WebGPU spec
-        float padding; // bytes
+        float scale = 1.0F;
+        int32_t width = 800;
+        int32_t height = 600;
+        float padding;
     };
     static_assert(sizeof(Uniform) % sizeof(std::array<float, 2>) == 0);
 

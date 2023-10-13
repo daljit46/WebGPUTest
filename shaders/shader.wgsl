@@ -1,6 +1,8 @@
 struct Uniforms {
     center: vec2f,
     scale: f32,
+    width: i32,
+    height: i32,
 };
 
 struct VertexInput {

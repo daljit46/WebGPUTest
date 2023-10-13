@@ -94,7 +94,7 @@ Application::Application()
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    m_window = glfwCreateWindow(640, 480, "WebGPU Test", nullptr, nullptr);
+    m_window = glfwCreateWindow(m_uniforms.width, m_uniforms.height, "WebGPU Test", nullptr, nullptr);
 
     if(!m_window) {
         glfwTerminate();
@@ -363,6 +363,8 @@ void Application::onFrame()
     std::cout << "Uniforms: \n";
     std::cout << "  scale: " << m_uniforms.scale << std::endl;
     std::cout <<  " center: " << m_uniforms.center[0] << ", " << m_uniforms.center[1] << std::endl;
+    std::cout << "  width: " << m_uniforms.width << std::endl;
+    std::cout << " height: " << m_uniforms.height << std::endl;
 
     wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &m_uniforms, sizeof(Uniform));
 
@@ -412,6 +414,9 @@ void Application::buildSwapchain()
 
     int width, height;
     glfwGetFramebufferSize(m_window, &width, &height);
+
+    m_uniforms.width = width;
+    m_uniforms.height = height;
 
     if (m_swapChain != nullptr) {
         wgpuSwapChainRelease(m_swapChain);
