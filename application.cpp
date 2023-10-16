@@ -19,6 +19,7 @@ void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue) {
         if (message)
             std::cout << " (" << message << ")";
         std::cout << std::endl;
+        throw std::runtime_error(message);
     };
     auto onDeviceLost = [](WGPUDeviceLostReason reason, char const* message, void*){
         std::cout << "Device lost error: reason" << reason;
