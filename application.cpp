@@ -7,9 +7,10 @@
 #include <array>
 #include <exception>
 #include <iostream>
-#include <math.h>
+#include <cmath>
 #include <vector>
-
+#include <numeric>
+#include <algorithm>
 
 namespace {
 void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue) {
@@ -61,17 +62,24 @@ void setGLFWcallbacks(GLFWwindow *window) {
 
     auto onMouseButton = [](GLFWwindow *window, int button, int action,
                             int /* mods */) {
-        if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-            double x, y;
-            glfwGetCursorPos(window, &x, &y);
-            auto that =
-                reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
-            if (that != nullptr)
-                that->onMouseButton(button, action, 0);
-        }
+        double x, y;
+        glfwGetCursorPos(window, &x, &y);
+        auto that =
+            reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+        if (that != nullptr)
+            that->onMouseButton(button, action, 0);
     };
 
     glfwSetMouseButtonCallback(window, onMouseButton);
+
+    auto onScroll = [](GLFWwindow *window, double x, double y) {
+        auto that = reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+        if(that != nullptr){
+            that->onScroll(x, y);
+        }
+    };
+
+    glfwSetScrollCallback(window, onScroll);
 
     auto onWindowResize = [](GLFWwindow *window, int width, int height) {
         auto that =
@@ -95,15 +103,14 @@ Application::Application()
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    m_window = glfwCreateWindow(m_uniforms.width, m_uniforms.height, "WebGPU Test", nullptr, nullptr);
+    m_window = glfwCreateWindow(m_uniforms.windowWidth, m_uniforms.windowHeight, "WebGPU Test", nullptr, nullptr);
 
     if(!m_window) {
         glfwTerminate();
         throw std::runtime_error("Failed to open window!");
     }
     glfwSetWindowUserPointer(m_window, this);
-    glfwSetFramebufferSizeCallback(m_window, onWindowResize);
-
+    setGLFWcallbacks(m_window);
     // Create WGPU instance
     WGPUInstanceDescriptor desc{};
     desc.nextInChain = nullptr;
@@ -329,7 +336,18 @@ void Application::onFrame()
     double currentFrameTime = glfwGetTime();
     double deltaTime = currentFrameTime - m_previousFrameTime;
     m_previousFrameTime = currentFrameTime;
-    std::cout << "Frame time: " << deltaTime << std::endl;
+    m_frameTimesList.push_back(1.0f / deltaTime);
+
+    // Calculate average frame rate of last 10 frames
+    float frameRate = [&](){
+        if(m_frameTimesList.size() > 10) {
+            return std::reduce(m_frameTimesList.end() - 10, m_frameTimesList.end()) / 10.0F;
+        }
+        return std::reduce(m_frameTimesList.begin(), m_frameTimesList.end()) / static_cast<float>(m_frameTimesList.size());
+    }();
+
+    std::string title = "WebGPU " + std::to_string(static_cast<int32_t>(frameRate)) + " FPS";
+    glfwSetWindowTitle(m_window, title.c_str());
     glfwPollEvents();
     WGPUTextureView nextTexture = wgpuSwapChainGetCurrentTextureView(m_swapChain);
     if (!nextTexture) {
@@ -358,14 +376,14 @@ void Application::onFrame()
     renderPassDesc.timestampWrites = nullptr;
 
     // Update uniform buffer
-    float t = static_cast<float>(glfwGetTime()) * 2;
-    m_uniforms.scale = std::abs(std::sin(t/12));
+//    float t = static_cast<float>(glfwGetTime()) * 2;
+//    m_uniforms.scale = std::abs(std::sin(t/12));
 
-    std::cout << "Uniforms: \n";
-    std::cout << "  scale: " << m_uniforms.scale << std::endl;
-    std::cout <<  " center: " << m_uniforms.center[0] << ", " << m_uniforms.center[1] << std::endl;
-    std::cout << "  width: " << m_uniforms.width << std::endl;
-    std::cout << " height: " << m_uniforms.height << std::endl;
+//    std::cout << "Uniforms: \n";
+//    std::cout << "  scale: " << m_uniforms.scale << std::endl;
+//    std::cout <<  " center: " << m_uniforms.center[0] << ", " << m_uniforms.center[1] << std::endl;
+//    std::cout << "  width: " << m_uniforms.windowWidth << std::endl;
+//    std::cout << " height: " << m_uniforms.windowHeight << std::endl;
 
     wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &m_uniforms, sizeof(Uniform));
 
@@ -416,8 +434,8 @@ void Application::buildSwapchain()
     int width, height;
     glfwGetFramebufferSize(m_window, &width, &height);
 
-    m_uniforms.width = width;
-    m_uniforms.height = height;
+    m_uniforms.windowWidth = width;
+    m_uniforms.windowHeight = height;
 
     if (m_swapChain != nullptr) {
         wgpuSwapChainRelease(m_swapChain);
@@ -432,7 +450,7 @@ void Application::buildSwapchain()
     m_swapChainFormat = WGPUTextureFormat_BGRA8Unorm;
     swapChainDesc.format = m_swapChainFormat;
     swapChainDesc.usage = WGPUTextureUsage_RenderAttachment;
-    swapChainDesc.presentMode = WGPUPresentMode_Fifo;
+    swapChainDesc.presentMode = WGPUPresentMode_Immediate;
     m_swapChain = wgpuDeviceCreateSwapChain(m_device, m_surface, &swapChainDesc);
     std::cout << "Swapchain: " << m_swapChain << std::endl;
 
@@ -442,9 +460,35 @@ void Application::buildSwapchain()
 }
 
 void Application::onMouseMove(double x, double y) {
-    //   std::cout << "Mouse moved to (" << x << ", " << y << ")" << std::endl;
+//    std::cout << "Mouse moved to (" << x << ", " << y << ")" << std::endl;
+    if(m_mouseState == MouseState::Dragging){
+        double diffX = x - m_previousMouseX;
+        double diffY = y - m_previousMouseY;
+        m_uniforms.offset[0] += static_cast<float>(diffX);
+        m_uniforms.offset[1] += static_cast<float>(diffY);
+        m_previousMouseX = x;
+        m_previousMouseY = y;
+    }
+}
+
+void Application::onScroll(double x, double y)
+{
+    constexpr float minScale = 0.1F;
+    constexpr float maxScale = 100000.0F;
+
+    float desiredScale = m_uniforms.scale + static_cast<float>(y/10.F * m_uniforms.scale);
+    float newScale = std::clamp(desiredScale, minScale, maxScale);
+    m_uniforms.offset[0] = m_uniforms.offset[0] * newScale / m_uniforms.scale;
+    m_uniforms.offset[1] = m_uniforms.offset[1] * newScale / m_uniforms.scale;
+    m_uniforms.scale = newScale;
 }
 
 void Application::onMouseButton(int button, int action, int mods) {
-    std::cout << "Mouse button " << button << " was " << action << std::endl;
+    if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        m_mouseState = MouseState::Dragging;
+        glfwGetCursorPos(m_window, &m_previousMouseX, &m_previousMouseY);
+    }
+    else {
+        m_mouseState = MouseState::Idle;
+    }
 }

@@ -1,6 +1,7 @@
 #include <webgpu/webgpu.h>
 
 #include <array>
+#include <vector>
 
 class GLFWwindow;
 
@@ -8,6 +9,8 @@ class Application
 {
 public:
     Application();
+
+    enum class MouseState { Idle, Dragging };
 
     bool isRunning() const;
 
@@ -19,15 +22,17 @@ public:
 
     void onMouseMove(double x, double y);
 
+    void onScroll(double x, double y);
+
     void onMouseButton(int button, int action, int mods);
 private:
     void buildSwapchain();
 
     struct Uniform {
-        std::array<float, 2> center = { 0.0F, 0.0F }; // 8 bytes
+        std::array<float, 2> offset = { 0.0F, 0.0F };
         float scale = 1.0F;
-        int32_t width = 800;
-        int32_t height = 600;
+        int32_t windowWidth = 800;
+        int32_t windowHeight = 600;
         float padding;
     };
     static_assert(sizeof(Uniform) % sizeof(std::array<float, 2>) == 0);
@@ -50,5 +55,9 @@ private:
     int m_vertexCount = 0;
     int m_indexCount = 0;
 
+    std::vector<float> m_frameTimesList;
     double m_previousFrameTime = 0.0;
+    MouseState m_mouseState = MouseState::Idle;
+    double m_previousMouseX = 0.0;
+    double m_previousMouseY = 0.0;
 };

@@ -1,8 +1,8 @@
 struct Uniforms {
-    center: vec2f,
+    offset: vec2f,
     scale: f32,
-    width: i32,
-    height: i32,
+    windowWidth: i32,
+    windowHeight: i32,
 };
 
 struct VertexInput {
@@ -26,17 +26,19 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 }
 
 // Max iterations
-const MAX_ITERATIONS: i32 = 500;
+const MAX_ITERATIONS: f32 = 512.0;
 
-fn mandlebrot_iterations(c: vec2f) -> i32 {
+fn mandlebrot_iterations(c: vec2f) -> f32 {
     var z = vec2f(0.0, 0.0);
-    var i: i32 = 0;
+    var i: f32 = 0;
     while (i < MAX_ITERATIONS) {
-        z = vec2f(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
-        if (z.x * z.x + z.y * z.y > 4.0) {
+        let zxx = z.x * z.x;
+        let zyy = z.y * z.y;
+        z = vec2f(zxx - zyy, 2.0 * z.x * z.y) + c;
+        if (zxx + zyy > 4.0) {
             break;
         }
-        i = i + 1;
+        i = i + 1.0;
     }
     return i;
 }
@@ -52,26 +54,38 @@ fn hsv2rgb(c: vec3f) -> vec3f {
 }
 
 fn location_color(c: vec2f) -> vec3f {
-    var i: i32 = mandlebrot_iterations(c);
+    // skip computation inside bulbs
+    // see https://iquilezles.org/articles/mset1bulb
+    // see https://iquilezles.org/articles/mset2bulb
+    let c2 = dot(c, c);
+    if( 256.0*c2*c2 - 96.0*c2 + 32.0*c.x - 3.0 < 0.0 ){
+        return vec3f(0.0, 0.0, 0.0);
+    }
+    if( 16.0*(c2+2.0*c.x+1.0) - 1.0 < 0.0 ){
+        return vec3f(0.0, 0.0, 0.0);
+    }
 
-    let iterations: f32 = f32(i) / f32(MAX_ITERATIONS);
+    var i: f32 = mandlebrot_iterations(c);
 
-    let hue = iterations;
-    let saturation = 1.0;
+    let iterations = i / MAX_ITERATIONS;
+
     var brightness = 1.0;
 
     if(i == MAX_ITERATIONS) {
         brightness = 0.0;
     }
 
-    return hsv2rgb(vec3f(hue, saturation, brightness));
+    return hsv2rgb(vec3f(iterations, 1.0, brightness));
 }
 
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f{
-    let c = ((in.position.xy / 1000)) * uUniformData.scale + vec2f(0.3, 0.5);
-    let color = location_color(vec2f(c.x, -c.y));
+    let largest_dim = max(f32(uUniformData.windowWidth), f32(uUniformData.windowHeight));
+    let scale_factor = 5 / uUniformData.scale;
+    let cx = ((in.position.x - uUniformData.offset.x)/ largest_dim - 0.5) * scale_factor;
+    let cy = ((in.position.y - uUniformData.offset.y)/ largest_dim - 0.35) * scale_factor;
+    let color = location_color(vec2f(cx, -cy));
 
     return vec4f(color, 1.0);
 }
