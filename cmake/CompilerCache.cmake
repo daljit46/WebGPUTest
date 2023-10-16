@@ -1,33 +1,65 @@
-# Automatically enable compiler caching if available
-function(use_compiler_cache)
-  set(CACHE_OPTION
-      "ccache"
-      CACHE STRING "Compiler cache to be used")
-  set(CACHE_OPTION_VALUES "ccache" "sccache")
-  set_property(CACHE CACHE_OPTION PROPERTY STRINGS ${CACHE_OPTION_VALUES})
-  list(
-    FIND
-    CACHE_OPTION_VALUES
-    ${CACHE_OPTION}
-    CACHE_OPTION_INDEX)
+# SPDX-FileCopyrightText: 2021 Tenacity Audio Editor contributors
+# SPDX-FileContributor: Be <be.0@gmx.com>
+# SPDX-FileContributor: Emily Mabrey <emabrey@tenacityaudio.org>
+#
+# SPDX-License-Identifier: BSD-3-Clause
+#[=======================================================================[.rst:
+CompilerCaching
+---------------
 
-  if(${CACHE_OPTION_INDEX} EQUAL -1)
-    message(
-      STATUS
-        "Using custom compiler cache system: '${CACHE_OPTION}', explicitly supported entries are ${CACHE_OPTION_VALUES}"
-    )
-  endif()
+Search for sccache and ccache and use them for compiler caching for C & C++.
+ccache is preferred if both are found, but the user can override this by
+explicitly setting CCACHE=OFF to use sccache when both are installed.
+#]=======================================================================]
 
-  find_program(CACHE_BINARY NAMES ${CACHE_OPTION_VALUES})
-  if(CACHE_BINARY)
-    message(STATUS "${CACHE_BINARY} found and enabled")
-    set(CMAKE_CXX_COMPILER_LAUNCHER
-        ${CACHE_BINARY}
-        CACHE FILEPATH "CXX compiler cache used")
-    set(CMAKE_C_COMPILER_LAUNCHER
-        ${CACHE_BINARY}
-        CACHE FILEPATH "C compiler cache used")
+# ccache does not support MSVC
+if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+  find_program(CCACHE_PROGRAM ccache)
+  mark_as_advanced(FORCE CCACHE_PROGRAM)
+  if("${CCACHE_PROGRAM}" STREQUAL "CCACHE_PROGRAM-NOTFOUND")
+    message(STATUS "Could NOT find ccache")
   else()
-    message(WARNING "${CACHE_OPTION} is enabled but was not found. Not using it")
+    message(STATUS "Found ccache: ${CCACHE_PROGRAM}")
+    option(CCACHE "Use ccache for compiler caching to speed up rebuilds." ON)
   endif()
-endfunction()
+endif()
+
+find_program(SCCACHE_PROGRAM sccache)
+mark_as_advanced(FORCE SCCACHE_PROGRAM)
+if("${SCCACHE_PROGRAM}" STREQUAL "SCCACHE_PROGRAM-NOTFOUND")
+  message(STATUS "Could NOT find sccache")
+else()
+  message(STATUS "Found sccache: ${SCCACHE_PROGRAM}")
+  option(SCCACHE "Use sccache for compiler caching to speed up rebuilds." ON)
+endif()
+
+if(CCACHE)
+  message(STATUS "Using ccache for compiler caching to speed up rebuilds")
+  set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+  set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+elseif(SCCACHE)
+  message(STATUS "Using sccache for compiler caching to speed up rebuilds")
+  set(CMAKE_C_COMPILER_LAUNCHER "${SCCACHE_PROGRAM}")
+  set(CMAKE_CXX_COMPILER_LAUNCHER "${SCCACHE_PROGRAM}")
+
+  # Instruct MSVC to generate symbolic debug information within object files for sccache
+  if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    if(IS_MULTI_CONFIG)
+      foreach(CONFIG ${CMAKE_CONFIGURATION_TYPES})
+        string(TOUPPER "${CONFIG}" CONFIG)
+        string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_${CONFIG} "${CMAKE_CXX_FLAGS_${CONFIG}}")
+        string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_${CONFIG} "${CMAKE_C_FLAGS_${CONFIG}}")
+      endforeach()
+    else()
+      string(TOUPPER "${CMAKE_BUILD_TYPE}" CONFIG)
+      string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_${CONFIG} "${CMAKE_CXX_FLAGS_${CONFIG}}")
+      string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_${CONFIG} "${CMAKE_C_FLAGS_${CONFIG}}")
+    endif()
+  endif()
+else()
+  if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    message(STATUS "No compiler caching enabled. Install sccache to speed up rebuilds.")
+  else()
+    message(STATUS "No compiler caching enabled. Install ccache or sccache to speed up rebuilds.")
+  endif()
+endif()
