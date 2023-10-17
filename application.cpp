@@ -153,7 +153,7 @@ Application::Application()
     WGPURequiredLimits requiredLimits {};
     requiredLimits.limits.maxVertexAttributes = 2;
     requiredLimits.limits.maxVertexBuffers = 1;
-    requiredLimits.limits.maxBufferSize = 5 * 4 * sizeof(float);
+    requiredLimits.limits.maxBufferSize = 2 * 4 * sizeof(float);
     requiredLimits.limits.maxVertexBufferArrayStride = 5 * sizeof(float);
     requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
     requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
@@ -183,14 +183,14 @@ Application::Application()
     buildSwapchain();
 
     // Upload vertex and uniform data to the GPU
-    constexpr uint32_t vertexDataSize = 5;
+    constexpr uint32_t vertexDataSize = 2;
 
-    std::array<float, 20> vertexData = {
-        // x,   y,     r,   g,   b
-        -1.0F, -1.0F, 1.0F, 0.0F, 0.0F,
-         1.0F, 1.0F,  0.0F, 1.0F, 0.0F,
-        -1.0F, 1.0F,  0.0F, 0.0F, 1.0F,
-         1.0F, -1.0F, 1.0F, 1.0F, 0.0F
+    std::array<float, 8> vertexData = {
+        // x,   y,   
+        -1.0F, -1.0F,
+         1.0F,  1.0F,
+        -1.0F,  1.0F,
+         1.0F, -1.0F,
     };
     std::array<uint16_t, 6> indexData = { 0, 1, 2, 0, 3, 1 };
     m_vertexCount = static_cast<int>(vertexData.size() / vertexDataSize);
@@ -229,12 +229,7 @@ Application::Application()
     positionAttrib.format = WGPUVertexFormat_Float32x2;
     positionAttrib.offset = 0;
 
-    WGPUVertexAttribute colorAttrib{};
-    colorAttrib.shaderLocation = 1;
-    colorAttrib.format = WGPUVertexFormat_Float32x3;
-    colorAttrib.offset = 2 * sizeof(float);
-
-    std::vector<WGPUVertexAttribute> vertexAttributes = { positionAttrib, colorAttrib };
+    std::vector<WGPUVertexAttribute> vertexAttributes = { positionAttrib };
 
     WGPUVertexBufferLayout vertexBufferLayout{};
     vertexBufferLayout.attributeCount = static_cast<uint32_t>(vertexAttributes.size());
@@ -349,7 +344,7 @@ void Application::onFrame()
     double currentFrameTime = glfwGetTime();
     double deltaTime = currentFrameTime - m_previousFrameTime;
     m_previousFrameTime = currentFrameTime;
-    m_frameTimesList.push_back(1.0f / deltaTime);
+    m_frameTimesList.push_back(1.0f / static_cast<float>(deltaTime));
 
     glfwPollEvents();
     WGPUTextureView nextTexture = wgpuSwapChainGetCurrentTextureView(m_swapChain);
@@ -392,7 +387,7 @@ void Application::onFrame()
 
     WGPURenderPassEncoder renderPass = wgpuCommandEncoderBeginRenderPass(encoder, &renderPassDesc);
     wgpuRenderPassEncoderSetPipeline(renderPass, m_renderPipeline);
-    wgpuRenderPassEncoderSetVertexBuffer(renderPass, 0, m_vertexBuffer, 0, m_vertexCount * 5 * sizeof(float));
+    wgpuRenderPassEncoderSetVertexBuffer(renderPass, 0, m_vertexBuffer, 0, m_vertexCount * 2 * sizeof(float));
     wgpuRenderPassEncoderSetIndexBuffer(renderPass, m_indexBuffer, WGPUIndexFormat_Uint16, 0, m_indexCount * sizeof(uint16_t));
     wgpuRenderPassEncoderSetBindGroup(renderPass, 0, m_bindGroup, 0, nullptr);
     wgpuRenderPassEncoderDrawIndexed(renderPass, m_indexCount, 1, 0, 0, 0);
