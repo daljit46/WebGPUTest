@@ -48,10 +48,19 @@ add_subdirectory(dawn EXCLUDE_FROM_ALL)
 add_subdirectory(glfw3webgpu)
 
 set(IMGUI_SOURCES
+    imgui/imconfig.h
+    imgui/imgui.h
     imgui/imgui.cpp
+    imgui/misc/cpp/imgui_stdlib.h
+    imgui/misc/cpp/imgui_stdlib.cpp
     imgui/imgui_draw.cpp
+    imgui/imgui_internal.h
     imgui/imgui_widgets.cpp
     imgui/imgui_tables.cpp
+    imgui/backends/imgui_impl_glfw.h
+    imgui/backends/imgui_impl_glfw.cpp
+    imgui/backends/imgui_impl_wgpu.h
+    imgui/backends/imgui_impl_wgpu.cpp
 )
 
 add_executable(WebGPUTest 
@@ -81,6 +90,11 @@ add_custom_command(TARGET ${CMAKE_PROJECT_NAME} PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E create_symlink
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
     "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders")
+
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets")
 
 install(TARGETS WebGPUTest
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

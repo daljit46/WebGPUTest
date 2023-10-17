@@ -3,7 +3,7 @@
 #include <array>
 #include <vector>
 
-class GLFWwindow;
+struct GLFWwindow;
 
 class Application
 {
@@ -27,13 +27,16 @@ public:
     void onMouseButton(int button, int action, int mods);
 private:
     void buildSwapchain();
+    bool initGui();
+    void terminateGui();
+    void updateGui(WGPURenderPassEncoder pass);
 
     struct Uniform {
         std::array<float, 2> offset = { 0.0F, 0.0F };
         float scale = 1.0F;
         int32_t windowWidth = 800;
         int32_t windowHeight = 600;
-        float padding;
+        float max_iter = 512.0;
     };
     static_assert(sizeof(Uniform) % sizeof(std::array<float, 2>) == 0);
 
@@ -60,4 +63,6 @@ private:
     MouseState m_mouseState = MouseState::Idle;
     double m_previousMouseX = 0.0;
     double m_previousMouseY = 0.0;
+
+    float m_monitorScale = 1.0F;
 };

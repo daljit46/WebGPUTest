@@ -3,6 +3,9 @@
 
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
+#include <imgui.h>
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_wgpu.h>
 
 #include <array>
 #include <exception>
@@ -111,6 +114,12 @@ Application::Application()
     }
     glfwSetWindowUserPointer(m_window, this);
     setGLFWcallbacks(m_window);
+
+    float xscale, yscale;
+    GLFWmonitor* primary = glfwGetPrimaryMonitor();
+    glfwGetMonitorContentScale(primary, &xscale, &yscale);
+    m_monitorScale = std::max(xscale, yscale);
+
     // Create WGPU instance
     WGPUInstanceDescriptor desc{};
     desc.nextInChain = nullptr;
@@ -148,7 +157,7 @@ Application::Application()
     requiredLimits.limits.maxVertexBufferArrayStride = 5 * sizeof(float);
     requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
     requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
-    requiredLimits.limits.maxBindGroups = 1;
+    requiredLimits.limits.maxBindGroups = 2;
     requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
     requiredLimits.limits.maxUniformBufferBindingSize = 16 * sizeof(float);
 
@@ -324,6 +333,10 @@ Application::Application()
     m_renderPipeline = wgpuDeviceCreateRenderPipeline(m_device, &pipelineDesc);
     std::cout << "Render pipeline: " << m_renderPipeline << std::endl;
     m_previousFrameTime = glfwGetTime();
+
+    if(!initGui()){
+        throw std::runtime_error("Failed to initialize Dear ImGui!");
+    }
 }
 
 bool Application::isRunning() const
@@ -338,16 +351,6 @@ void Application::onFrame()
     m_previousFrameTime = currentFrameTime;
     m_frameTimesList.push_back(1.0f / deltaTime);
 
-    // Calculate average frame rate of last 10 frames
-    float frameRate = [&](){
-        if(m_frameTimesList.size() > 10) {
-            return std::reduce(m_frameTimesList.end() - 10, m_frameTimesList.end()) / 10.0F;
-        }
-        return std::reduce(m_frameTimesList.begin(), m_frameTimesList.end()) / static_cast<float>(m_frameTimesList.size());
-    }();
-
-    std::string title = "WebGPU " + std::to_string(static_cast<int32_t>(frameRate)) + " FPS";
-    glfwSetWindowTitle(m_window, title.c_str());
     glfwPollEvents();
     WGPUTextureView nextTexture = wgpuSwapChainGetCurrentTextureView(m_swapChain);
     if (!nextTexture) {
@@ -393,6 +396,7 @@ void Application::onFrame()
     wgpuRenderPassEncoderSetIndexBuffer(renderPass, m_indexBuffer, WGPUIndexFormat_Uint16, 0, m_indexCount * sizeof(uint16_t));
     wgpuRenderPassEncoderSetBindGroup(renderPass, 0, m_bindGroup, 0, nullptr);
     wgpuRenderPassEncoderDrawIndexed(renderPass, m_indexCount, 1, 0, 0, 0);
+    updateGui(renderPass);
     wgpuRenderPassEncoderEnd(renderPass);
 
 
@@ -412,6 +416,7 @@ void Application::onFrame()
 
 void Application::onFinish()
 {
+    terminateGui();
     wgpuSwapChainRelease(m_swapChain);
     wgpuDeviceRelease(m_device);
     wgpuSurfaceRelease(m_surface);
@@ -459,6 +464,55 @@ void Application::buildSwapchain()
     }
 }
 
+bool Application::initGui()
+{
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    auto io = ImGui::GetIO();
+    ImGui_ImplGlfw_InitForOther(m_window, true);
+    ImGui_ImplWGPU_Init(m_device, 3, m_swapChainFormat);
+    ImGui::GetStyle().ScaleAllSizes(m_monitorScale);
+    // set font size
+    io.Fonts->Clear();
+    io.Fonts->AddFontFromFileTTF("assets/fonts/Roboto-Regular.ttf", 16.0f * m_monitorScale);
+    return true;
+}
+
+void Application::terminateGui()
+{
+    ImGui_ImplWGPU_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+}
+
+void Application::updateGui(WGPURenderPassEncoder pass)
+{
+    // Calculate average frame rate of last 10 frames
+    float frameRate = [&](){
+        constexpr size_t maxFrameTimes = 50;
+        if(m_frameTimesList.size() > maxFrameTimes) {
+            return std::reduce(m_frameTimesList.end() - maxFrameTimes, m_frameTimesList.end()) / static_cast<float>(maxFrameTimes);
+        }
+        return std::reduce(m_frameTimesList.begin(), m_frameTimesList.end()) / static_cast<float>(m_frameTimesList.size());
+    }();
+
+
+    ImGui_ImplWGPU_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    ImGui::SetNextWindowSize({800, 200}, ImGuiCond_FirstUseEver);
+    ImGui::Begin("WebGPU!");
+    ImGui::Text("Average frame rate (%.1f FPS)", frameRate);
+    int32_t max_iter = static_cast<int>(m_uniforms.max_iter);
+    ImGui::SliderInt("Max iteration count", &max_iter, 10, 1000);
+    m_uniforms.max_iter = static_cast<float>(max_iter);
+    ImGui::End();
+
+
+    ImGui::EndFrame();
+    ImGui::Render();
+    ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), pass);
+}
+
 void Application::onMouseMove(double x, double y) {
 //    std::cout << "Mouse moved to (" << x << ", " << y << ")" << std::endl;
     if(m_mouseState == MouseState::Dragging){
@@ -484,6 +538,10 @@ void Application::onScroll(double x, double y)
 }
 
 void Application::onMouseButton(int button, int action, int mods) {
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.WantCaptureMouse) {
+        return;
+    }
     if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         m_mouseState = MouseState::Dragging;
         glfwGetCursorPos(m_window, &m_previousMouseX, &m_previousMouseY);

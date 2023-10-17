@@ -3,6 +3,7 @@ struct Uniforms {
     scale: f32,
     windowWidth: i32,
     windowHeight: i32,
+    max_iterations: f32,
 };
 
 struct VertexInput {
@@ -25,13 +26,10 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
-// Max iterations
-const MAX_ITERATIONS: f32 = 512.0;
-
 fn mandlebrot_iterations(c: vec2f) -> f32 {
     var z = vec2f(0.0, 0.0);
     var i: f32 = 0;
-    while (i < MAX_ITERATIONS) {
+    while (i < uUniformData.max_iterations) {
         let zxx = z.x * z.x;
         let zyy = z.y * z.y;
         z = vec2f(zxx - zyy, 2.0 * z.x * z.y) + c;
@@ -67,11 +65,11 @@ fn location_color(c: vec2f) -> vec3f {
 
     var i: f32 = mandlebrot_iterations(c);
 
-    let iterations = i / MAX_ITERATIONS;
+    let iterations = i / uUniformData.max_iterations;
 
     var brightness = 1.0;
 
-    if(i == MAX_ITERATIONS) {
+    if(i == uUniformData.max_iterations) {
         brightness = 0.0;
     }
 
