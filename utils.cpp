@@ -4,6 +4,54 @@
 #include <fstream>
 #include <vector>
 
+
+namespace {
+  std::string adapterTypeToString(WGPUAdapterType type) {
+    switch (type) {
+    case WGPUAdapterType_DiscreteGPU:
+      return "Discrete GPU";
+    case WGPUAdapterType_IntegratedGPU:
+      return "Integrated GPU";
+    case WGPUAdapterType_CPU:
+      return "CPU";
+    case WGPUAdapterType_Unknown:
+      return "Unknown";
+    case WGPUAdapterType_Force32:
+      return "Force32";
+    default:
+      return "Invalid";
+    }
+  }
+
+  std::string adapterBackendToString(WGPUBackendType backend) {
+    switch (backend) {
+      case WGPUBackendType_Undefined:
+        return "Undefined";
+      case WGPUBackendType_Null:
+        return "Null";
+      case WGPUBackendType_WebGPU:
+        return "WebGPU";
+      case WGPUBackendType_D3D11:
+        return "D3D11";
+      case WGPUBackendType_D3D12:
+        return "D3D12";
+      case WGPUBackendType_Metal:
+        return "Metal";
+      case WGPUBackendType_Vulkan:
+        return "Vulkan";
+      case WGPUBackendType_OpenGL:
+        return "OpenGL";
+      case WGPUBackendType_OpenGLES:
+        return "OpenGLES";
+      case WGPUBackendType_Force32:
+        return "Force32";
+      default:
+        return "Invalid";
+    }
+    
+  }
+}
+
 namespace Utils {
 WGPUAdapter requestAdapter(WGPUInstance instance,
                            const WGPURequestAdapterOptions *options) {
@@ -57,6 +105,16 @@ WGPUDevice requestDevice(WGPUAdapter adapter, const WGPUDeviceDescriptor *descri
     wgpuAdapterRequestDevice(adapter, descriptor, onDeviceRequestEnded, (void*)&userData);
     assert(userData.requestEnded);
 
+    // Get adapter properties
+    WGPUAdapterProperties properties{};
+    wgpuAdapterGetProperties(adapter, &properties);
+    std::cout << "Adapter name: " << properties.name << std::endl;
+    std::cout << "Adapter vendor: " << properties.vendorName << std::endl;
+    std::cout << "Adapter device id: " << properties.deviceID << std::endl;
+    std::cout << "Adapter driver version: " << properties.driverDescription << std::endl;
+    std::cout << "Adapter type: " << adapterTypeToString(properties.adapterType) << std::endl;
+    std::cout << "Adapter backend type: " << adapterBackendToString(properties.backendType) << std::endl;
+    std::cout << "Adapter compatibility mode: " << properties.compatibilityMode << std::endl;
     return userData.device;
 }
 
