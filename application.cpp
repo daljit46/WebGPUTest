@@ -224,6 +224,14 @@ Application::Application()
     wgpuQueueWriteBuffer(m_queue, m_indexBuffer, 0, indexData.data(), indexBufferDesc.size);
     wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &m_uniforms, sizeof(Uniform));
 
+    WGPUTextureView textureView = nullptr;
+
+    m_texture = Utils::loadTexture("assets/textures/scottish-cow.jpeg", m_device, textureView);
+    if(!m_texture){
+        throw std::runtime_error("Unable to load texture from disk!");
+    }
+
+
     WGPUVertexAttribute positionAttrib{};
     positionAttrib.shaderLocation = 0;
     positionAttrib.format = WGPUVertexFormat_Float32x2;
@@ -237,7 +245,7 @@ Application::Application()
     vertexBufferLayout.arrayStride = vertexDataSize * sizeof(float);
     vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
 
-    // Create binding group
+
     WGPUBindGroupLayoutEntry bindingLayout = Utils::createDefaultBindingLayout();
     bindingLayout.nextInChain = nullptr;
     bindingLayout.binding = 0;
@@ -245,10 +253,20 @@ Application::Application()
     bindingLayout.buffer.type = WGPUBufferBindingType_Uniform;
     bindingLayout.buffer.minBindingSize = sizeof(Uniform);
 
+    WGPUBindGroupLayoutEntry textureBindingLayout = Utils::createDefaultBindingLayout();
+    textureBindingLayout.nextInChain = nullptr;
+    textureBindingLayout.binding = 1;
+    textureBindingLayout.visibility = WGPUShaderStage_Fragment;
+    textureBindingLayout.texture.sampleType = WGPUTextureSampleType_Float;
+    textureBindingLayout.texture.viewDimension = WGPUTextureViewDimension_2D;
+
+    // Create binding group
+    std::vector<WGPUBindGroupLayoutEntry> bindingLayoutList = { bindingLayout, textureBindingLayout };
+
     WGPUBindGroupLayoutDescriptor bindGroupLayoutDesc {};
     bindGroupLayoutDesc.nextInChain = nullptr;
-    bindGroupLayoutDesc.entryCount = 1;
-    bindGroupLayoutDesc.entries = &bindingLayout;
+    bindGroupLayoutDesc.entryCount = bindingLayoutList.size();
+    bindGroupLayoutDesc.entries = bindingLayoutList.data();
     WGPUBindGroupLayout bindingGroupLayout = wgpuDeviceCreateBindGroupLayout(m_device, &bindGroupLayoutDesc);
 
     WGPUPipelineLayoutDescriptor pipelineLayoutDesc {};
@@ -264,11 +282,18 @@ Application::Application()
     binding.offset = 0;
     binding.size = sizeof(Uniform);
 
+    WGPUBindGroupEntry textureBinding {};
+    textureBinding.nextInChain = nullptr;
+    textureBinding.binding = 1;
+    textureBinding.textureView = textureView;
+
+    std::vector<WGPUBindGroupEntry> bindingList = { binding, textureBinding };
+
     WGPUBindGroupDescriptor bindGroupDesc {};
     bindGroupDesc.nextInChain = nullptr;
     bindGroupDesc.layout = bindingGroupLayout;
-    bindGroupDesc.entryCount = bindGroupLayoutDesc.entryCount;
-    bindGroupDesc.entries = &binding;
+    bindGroupDesc.entryCount = bindingList.size();
+    bindGroupDesc.entries = bindingList.data();
     m_bindGroup = wgpuDeviceCreateBindGroup(m_device, &bindGroupDesc);
 
 
@@ -372,16 +397,6 @@ void Application::onFrame()
     renderPassDesc.depthStencilAttachment = nullptr;
     renderPassDesc.timestampWrites = nullptr;
 
-    // Update uniform buffer
-//    float t = static_cast<float>(glfwGetTime()) * 2;
-//    m_uniforms.scale = std::abs(std::sin(t/12));
-
-//    std::cout << "Uniforms: \n";
-//    std::cout << "  scale: " << m_uniforms.scale << std::endl;
-//    std::cout <<  " center: " << m_uniforms.center[0] << ", " << m_uniforms.center[1] << std::endl;
-//    std::cout << "  width: " << m_uniforms.windowWidth << std::endl;
-//    std::cout << " height: " << m_uniforms.windowHeight << std::endl;
-
     wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &m_uniforms, sizeof(Uniform));
 
     WGPURenderPassEncoder renderPass = wgpuCommandEncoderBeginRenderPass(encoder, &renderPassDesc);
@@ -411,6 +426,8 @@ void Application::onFrame()
 void Application::onFinish()
 {
     terminateGui();
+    wgpuTextureDestroy(m_texture);
+    wgpuTextureRelease(m_texture);
     wgpuSwapChainRelease(m_swapChain);
     wgpuDeviceRelease(m_device);
     wgpuSurfaceRelease(m_surface);
@@ -496,9 +513,6 @@ void Application::updateGui(WGPURenderPassEncoder pass)
     ImGui::SetNextWindowSize({800, 200}, ImGuiCond_FirstUseEver);
     ImGui::Begin("WebGPU!");
     ImGui::Text("Average frame rate (%.1f FPS)", frameRate);
-    int32_t max_iter = static_cast<int>(m_uniforms.max_iter);
-    ImGui::SliderInt("Max iteration count", &max_iter, 10, 1000);
-    m_uniforms.max_iter = static_cast<float>(max_iter);
     ImGui::End();
 
 
@@ -512,8 +526,6 @@ void Application::onMouseMove(double x, double y) {
     if(m_mouseState == MouseState::Dragging){
         double diffX = x - m_previousMouseX;
         double diffY = y - m_previousMouseY;
-        m_uniforms.offset[0] += static_cast<float>(diffX);
-        m_uniforms.offset[1] += static_cast<float>(diffY);
         m_previousMouseX = x;
         m_previousMouseY = y;
     }
@@ -521,14 +533,6 @@ void Application::onMouseMove(double x, double y) {
 
 void Application::onScroll(double x, double y)
 {
-    constexpr float minScale = 0.1F;
-    constexpr float maxScale = 100000.0F;
-
-    float desiredScale = m_uniforms.scale + static_cast<float>(y/10.F * m_uniforms.scale);
-    float newScale = std::clamp(desiredScale, minScale, maxScale);
-    m_uniforms.offset[0] = m_uniforms.offset[0] * newScale / m_uniforms.scale;
-    m_uniforms.offset[1] = m_uniforms.offset[1] * newScale / m_uniforms.scale;
-    m_uniforms.scale = newScale;
 }
 
 void Application::onMouseButton(int button, int action, int mods) {

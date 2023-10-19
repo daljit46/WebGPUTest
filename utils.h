@@ -13,5 +13,9 @@ WGPUDevice requestDevice(WGPUAdapter adapter,
 WGPUShaderModule loadShaderModule(const std::filesystem::path& filePath,
                                   WGPUDevice device);
 
+WGPUTexture loadTexture(const std::filesystem::path &filePath,
+                        WGPUDevice device,
+                        WGPUTextureView &textureView);
+
 WGPUBindGroupLayoutEntry createDefaultBindingLayout();
 } // namespace Utils

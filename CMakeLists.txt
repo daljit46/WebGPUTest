@@ -68,6 +68,7 @@ add_executable(WebGPUTest
     utils.cpp
     ${IMGUI_SOURCES}
     application.h application.cpp
+    stb_image.h
 )
 
 target_link_libraries(WebGPUTest PRIVATE

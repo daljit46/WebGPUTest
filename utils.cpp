@@ -1,4 +1,7 @@
 #include "utils.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include <iostream>
 #include <cassert>
 #include <fstream>
@@ -161,4 +164,61 @@ WGPUBindGroupLayoutEntry createDefaultBindingLayout ()
 
     return bindingLayout;
 }
+
+WGPUTexture loadTexture(const std::filesystem::path &filePath, WGPUDevice device, WGPUTextureView &textureView)
+{
+    int width, height, channels;
+    unsigned char *pixelData = stbi_load(filePath.string().c_str(), &width, &height, &channels, 4);
+    if (nullptr == pixelData) return nullptr;
+
+    WGPUTextureDescriptor textureDesc {};
+    textureDesc.nextInChain = nullptr;
+    textureDesc.label = std::string("Texture: " + filePath.string()).data();
+    textureDesc.dimension = WGPUTextureDimension::WGPUTextureDimension_2D;
+    textureDesc.size = { (unsigned int)width, (unsigned int)height, 1 };
+    textureDesc.mipLevelCount = 1;
+    textureDesc.sampleCount = 1;
+    textureDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    textureDesc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+    textureDesc.viewFormatCount = 0;
+    textureDesc.viewFormats = nullptr;
+
+    WGPUTexture texture = wgpuDeviceCreateTexture(device, &textureDesc);
+    // Upload data to the texture
+    WGPUImageCopyTexture destination;
+    destination.nextInChain = nullptr;
+    destination.texture = texture;
+    destination.mipLevel = 0;
+    destination.origin = { 0, 0, 0 };
+    destination.aspect = WGPUTextureAspect_All;
+
+    WGPUTextureDataLayout source;
+    source.offset = 0;
+    source.bytesPerRow = 4 * textureDesc.size.width;
+    source.rowsPerImage = textureDesc.size.height;
+
+    auto queue = wgpuDeviceGetQueue(device);
+    wgpuQueueWriteTexture(queue,
+                          &destination,
+                          pixelData,
+                          textureDesc.size.width * textureDesc.size.height * 4,
+                          &source,
+                          &textureDesc.size);
+    wgpuQueueRelease(queue);
+
+    WGPUTextureViewDescriptor textureViewDesc;
+    textureViewDesc.aspect = WGPUTextureAspect_All;
+    textureViewDesc.baseArrayLayer = 0;
+    textureViewDesc.arrayLayerCount = 1;
+    textureViewDesc.baseMipLevel = 0;
+    textureViewDesc.mipLevelCount = textureDesc.mipLevelCount;
+    textureViewDesc.dimension = WGPUTextureViewDimension_2D;
+    textureViewDesc.format = textureDesc.format;
+    textureView = wgpuTextureCreateView(texture, &textureViewDesc);
+
+    stbi_image_free(pixelData);
+
+    return texture;
+}
+
 } // namespace Utils

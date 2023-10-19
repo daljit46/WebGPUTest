@@ -32,13 +32,10 @@ private:
     void updateGui(WGPURenderPassEncoder pass);
 
     struct Uniform {
-        std::array<float, 2> offset = { 0.0F, 0.0F };
-        float scale = 1.0F;
         int32_t windowWidth = 800;
         int32_t windowHeight = 600;
-        float max_iter = 512.0;
     };
-    static_assert(sizeof(Uniform) % sizeof(std::array<float, 2>) == 0);
+    static_assert(sizeof(Uniform) % sizeof(int32_t) == 0);
 
     Uniform m_uniforms;
     WGPUInstance m_instance = nullptr;
@@ -52,6 +49,7 @@ private:
     WGPUBuffer m_indexBuffer = nullptr;
     WGPUBuffer m_vertexBuffer = nullptr;
     WGPUBuffer m_uniformBuffer = nullptr;
+    WGPUTexture m_texture = nullptr;
     WGPUBindGroup m_bindGroup = nullptr;
     WGPUShaderModule m_shaderModule = nullptr;
     GLFWwindow *m_window = nullptr;
