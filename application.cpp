@@ -39,7 +39,7 @@ void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue) {
                               void * /* pUserData */) {
         std::cout << "Queued work finished with status: " << status << std::endl;
     };
-    wgpuQueueOnSubmittedWorkDone(queue, 0, onQueueWorkDone,
+    wgpuQueueOnSubmittedWorkDone(queue, onQueueWorkDone,
                                  nullptr /* pUserData */);
 }
 
@@ -370,7 +370,6 @@ void Application::onFrame()
     renderPassDesc.colorAttachmentCount = 1;
     renderPassDesc.colorAttachments = &renderPassColorAttachment;
     renderPassDesc.depthStencilAttachment = nullptr;
-    renderPassDesc.timestampWriteCount = 0;
     renderPassDesc.timestampWrites = nullptr;
 
     // Update uniform buffer
