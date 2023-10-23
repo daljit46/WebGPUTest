@@ -207,6 +207,7 @@ WGPUTexture loadTexture(const std::filesystem::path &filePath, WGPUDevice device
     wgpuQueueRelease(queue);
 
     WGPUTextureViewDescriptor textureViewDesc;
+    textureViewDesc.nextInChain = nullptr;
     textureViewDesc.aspect = WGPUTextureAspect_All;
     textureViewDesc.baseArrayLayer = 0;
     textureViewDesc.arrayLayerCount = 1;
