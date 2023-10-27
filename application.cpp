@@ -2,6 +2,7 @@
 #include "utils.h"
 
 #include <iostream>
+#include <cmath>
 
 namespace {
 void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue) {
