@@ -7,10 +7,7 @@ int main()
 {
     try {
         Application app;
-        while(app.isRunning()){
-            app.onFrame();
-        }
-        app.onFinish();
+        app.onCompute();
     }
     catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
