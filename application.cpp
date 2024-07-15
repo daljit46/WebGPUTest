@@ -53,12 +53,22 @@ Application::~Application()
 
 void Application::onCompute()
 {
+    std::vector<WGPURenderPassTimestampWrites> timestampWrites(2);
+    timestampWrites[0].querySet = m_timestampQuerySet;
+    timestampWrites[0].beginningOfPassWriteIndex = 0;
+    timestampWrites[0].endOfPassWriteIndex = 1;
     // Fill in the input buffer
     std::vector<float> input(m_bufferSize / sizeof(float));
-    for (size_t i = 0; i < input.size(); ++i) {
-        input[i] = static_cast<float>(i) * 0.1F;
+    // fill the input buffer with the entries of 100x1000 matrix
+    constexpr int rowCount = 5;
+    constexpr int colCount = 5;
+    for (auto i = 0; i < rowCount; ++i) {
+        for (auto j = 0; j < colCount; ++j) {
+            input[i * colCount + j] = i * colCount + j;
+        }
     }
-    wgpuQueueWriteBuffer(m_queue, m_inputBuffer, 0, input.data(), m_bufferSize);
+    wgpuQueueWriteBuffer(m_queue, m_inputBuffer1, 0, input.data(), m_bufferSize);
+    wgpuQueueWriteBuffer(m_queue, m_inputBuffer2, 0, input.data(), m_bufferSize);
 
     WGPUCommandEncoderDescriptor encoderDesc = {};
     encoderDesc.nextInChain = nullptr;
@@ -68,7 +78,8 @@ void Application::onCompute()
     WGPUComputePassDescriptor computePassDesc = {};
     computePassDesc.label = "Compute pass";
     computePassDesc.nextInChain = nullptr;
-    computePassDesc.timestampWrites = nullptr;
+    computePassDesc.timestampWrites = timestampWrites.data();
+    computePassDesc.timestampWriteCount = static_cast<uint32_t>(timestampWrites.size());
 
     WGPUComputePassEncoder computePass = wgpuCommandEncoderBeginComputePass(encoder, &computePassDesc);
     wgpuComputePassEncoderSetPipeline(computePass, m_computePipeline);
@@ -91,7 +102,6 @@ void Application::onCompute()
      
         // Set up callback for map buffer
     struct Context {
-        WGPUBuffer inputBuffer = nullptr;
         WGPUBuffer mapBuffer = nullptr;
         int32_t size = 0;
         bool done = false;
@@ -112,7 +122,7 @@ void Application::onCompute()
         }
         context->done = true;
     };
-    Context context{m_inputBuffer, m_mapBuffer, m_bufferSize, false, &input};
+    Context context{m_mapBuffer, m_bufferSize, false, &input};
     wgpuBufferMapAsync(m_mapBuffer, WGPUBufferUsage_MapRead, 0, m_bufferSize, onBufferMapped, (void*)&context);
 
     while(!context.done) {
@@ -120,10 +130,37 @@ void Application::onCompute()
     }
 }
 
+void Application::initBenchmark()
+{
+    WGPUQuerySetDescriptor querySetDesc = {};
+    querySetDesc.type = WGPUQueryType_Timestamp;
+    querySetDesc.count = 2;
+    m_timestampQuerySet = wgpuDeviceCreateQuerySet(m_device, &querySetDesc);
+
+    // init the timestamp buffer
+    WGPUBufferDescriptor timestampBufferDesc = {};
+    timestampBufferDesc.nextInChain = nullptr;
+    timestampBufferDesc.label = "Timestamp buffer";
+    timestampBufferDesc.size = 2 * sizeof(uint64_t);
+    timestampBufferDesc.usage = WGPUBufferUsage_QueryResolve;
+    m_timestampBuffer = wgpuDeviceCreateBuffer(m_device, &timestampBufferDesc);
+}
+
 void Application::initDevice()
 {
     WGPUInstanceDescriptor instanceDesc = {};
-    instanceDesc.nextInChain = nullptr;
+    WGPUDawnTogglesDescriptor dawnTogglesDesc = {};
+    dawnTogglesDesc.chain.next = nullptr;
+    dawnTogglesDesc.chain.sType = WGPUSType_DawnTogglesDescriptor;
+
+    std::vector<const char*> enabledToggles = {
+        "allow_unsafe_apis"
+    };
+    dawnTogglesDesc.enabledToggles = enabledToggles.data();
+    dawnTogglesDesc.enabledToggleCount = enabledToggles.size();
+    dawnTogglesDesc.disabledToggleCount = 0;
+
+    instanceDesc.nextInChain = &dawnTogglesDesc.chain;
 
     m_instance = wgpuCreateInstance(&instanceDesc);
 
@@ -151,11 +188,17 @@ void Application::initDevice()
     requiredLimits.limits.maxComputeInvocationsPerWorkgroup = 32;
     requiredLimits.limits.maxComputeWorkgroupsPerDimension = 2;
 
+    std::vector<WGPUFeatureName> features;
+    if(wgpuAdapterHasFeature(m_adapter, WGPUFeatureName::WGPUFeatureName_TimestampQuery)) {
+        features.push_back(WGPUFeatureName::WGPUFeatureName_TimestampQuery);
+    }
+
     // Get logical device and queue
     WGPUDeviceDescriptor deviceDesc{};
     deviceDesc.nextInChain = nullptr;
     deviceDesc.label = "Device";
-    deviceDesc.requiredFeatureCount = 0;
+    deviceDesc.requiredFeatures = features.data();
+    deviceDesc.requiredFeatureCount = static_cast<uint32_t>(features.size());
     deviceDesc.requiredLimits = &requiredLimits;
     deviceDesc.defaultQueue.nextInChain = nullptr;
     deviceDesc.defaultQueue.label = "Default queue";
@@ -165,6 +208,12 @@ void Application::initDevice()
         std::cerr << "Failed to get a device!" << std::endl;
         throw std::runtime_error("Failed to get a device!");
     }
+
+    if(!wgpuDeviceHasFeature(m_device, WGPUFeatureName_TimestampQuery)) {
+        std::cerr << "Device does not support timestamp query!" << std::endl;
+        throw std::runtime_error("Device does not support timestamp query!");
+    }
+
     m_queue = wgpuDeviceGetQueue(m_device);
     setWGPUCallbacks(m_device, m_queue);
 
@@ -173,22 +222,30 @@ void Application::initDevice()
 
 void Application::initBindGroupLayout()
 {
-    // Input buffer
-    WGPUBindGroupLayoutEntry inputBufferLayoutEntry = {};
-    inputBufferLayoutEntry.nextInChain = nullptr;
-    inputBufferLayoutEntry.binding = 0;
-    inputBufferLayoutEntry.visibility = WGPUShaderStage_Compute;
-    inputBufferLayoutEntry.buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+    // Input buffer 1
+    WGPUBindGroupLayoutEntry inputBufferLayoutEntry1 = {};
+    inputBufferLayoutEntry1.nextInChain = nullptr;
+    inputBufferLayoutEntry1.binding = 0;
+    inputBufferLayoutEntry1.visibility = WGPUShaderStage_Compute;
+    inputBufferLayoutEntry1.buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+
+    // Input buffer 2
+    WGPUBindGroupLayoutEntry inputBufferLayoutEntry2 = {};
+    inputBufferLayoutEntry2.nextInChain = nullptr;
+    inputBufferLayoutEntry2.binding = 1;
+    inputBufferLayoutEntry2.visibility = WGPUShaderStage_Compute;
+    inputBufferLayoutEntry2.buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
 
     // Output buffer
     WGPUBindGroupLayoutEntry outputBufferLayoutEntry = {};
     outputBufferLayoutEntry.nextInChain = nullptr;
-    outputBufferLayoutEntry.binding = 1;
+    outputBufferLayoutEntry.binding = 2;
     outputBufferLayoutEntry.visibility = WGPUShaderStage_Compute;
     outputBufferLayoutEntry.buffer.type = WGPUBufferBindingType_Storage;
 
-    std::array<WGPUBindGroupLayoutEntry, 2> bindGroupLayoutEntries = {
-        inputBufferLayoutEntry,
+    std::array<WGPUBindGroupLayoutEntry, 3> bindGroupLayoutEntries = {
+        inputBufferLayoutEntry1,
+        inputBufferLayoutEntry2,
         outputBufferLayoutEntry
     };
 
@@ -223,16 +280,18 @@ void Application::initComputePipeline()
 
 void Application::initBuffers()
 {
-    m_bufferSize = 64 * sizeof(float);
+    m_bufferSize = 25 * sizeof(float);
 
     // Create input buffers
     WGPUBufferDescriptor inputBufferDesc = {};
     inputBufferDesc.nextInChain = nullptr;
-    inputBufferDesc.label = "Input buffer";
+    inputBufferDesc.label = "Input buffer 1";
     inputBufferDesc.size = m_bufferSize;
     inputBufferDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
 
-    m_inputBuffer = wgpuDeviceCreateBuffer(m_device, &inputBufferDesc);
+    m_inputBuffer1 = wgpuDeviceCreateBuffer(m_device, &inputBufferDesc);
+    inputBufferDesc.label = "Input buffer 2";
+    m_inputBuffer2 = wgpuDeviceCreateBuffer(m_device, &inputBufferDesc);
 
     // Create output buffers
     WGPUBufferDescriptor outputBufferDesc = {};
@@ -254,22 +313,30 @@ void Application::initBuffers()
 
 void Application::initBindGroup()
 {
-    WGPUBindGroupEntry inputEntry = {};
-    inputEntry.nextInChain = nullptr;
-    inputEntry.binding = 0;
-    inputEntry.buffer = m_inputBuffer;
-    inputEntry.offset = 0;
-    inputEntry.size = m_bufferSize;
+    WGPUBindGroupEntry inputEntry1 = {};
+    inputEntry1.nextInChain = nullptr;
+    inputEntry1.binding = 0;
+    inputEntry1.buffer = m_inputBuffer1;
+    inputEntry1.offset = 0;
+    inputEntry1.size = m_bufferSize;
+
+    WGPUBindGroupEntry inputEntry2 = {};
+    inputEntry2.nextInChain = nullptr;
+    inputEntry2.binding = 1;
+    inputEntry2.buffer = m_inputBuffer2;
+    inputEntry2.offset = 0;
+    inputEntry2.size = m_bufferSize;
 
     WGPUBindGroupEntry outputEntry = {};
     outputEntry.nextInChain = nullptr;
-    outputEntry.binding = 1;
+    outputEntry.binding = 2;
     outputEntry.buffer = m_outputBuffer;
     outputEntry.offset = 0;
     outputEntry.size = m_bufferSize;
 
-    std::array<WGPUBindGroupEntry, 2> bindGroupEntries = {
-        inputEntry,
+    std::array<WGPUBindGroupEntry, 3> bindGroupEntries = {
+        inputEntry1,
+        inputEntry2,
         outputEntry
     };
 
@@ -280,6 +347,11 @@ void Application::initBindGroup()
     bindGroupDesc.entryCount = static_cast<uint32_t>(bindGroupEntries.size());
     bindGroupDesc.entries = bindGroupEntries.data();
     m_bindGroup = wgpuDeviceCreateBindGroup(m_device, &bindGroupDesc);
+}
+
+void Application::terminateBenchmark()
+{
+    wgpuQuerySetRelease(m_timestampQuerySet);
 }
 
 void Application::terminateDevice()
@@ -302,8 +374,10 @@ void Application::terminateComputePipeline()
 
 void Application::terminateBuffers()
 {
-    wgpuBufferDestroy(m_inputBuffer);
-    wgpuBufferRelease(m_inputBuffer);
+    wgpuBufferDestroy(m_inputBuffer1);
+    wgpuBufferRelease(m_inputBuffer1);
+    wgpuBufferDestroy(m_inputBuffer2);
+    wgpuBufferRelease(m_inputBuffer2);
     wgpuBufferDestroy(m_outputBuffer);
     wgpuBufferRelease(m_outputBuffer);
     wgpuBufferDestroy(m_mapBuffer);
@@ -314,3 +388,8 @@ void Application::terminateBindGroup()
 {
     wgpuBindGroupRelease(m_bindGroup);
 }
+
+void Application::fetchTimestamps(WGPUCommandEncoder encoder)
+{
+}
+

@@ -186,7 +186,6 @@ WGPUTexture loadTexture(const std::filesystem::path &filePath, WGPUDevice device
     WGPUTexture texture = wgpuDeviceCreateTexture(device, &textureDesc);
     // Upload data to the texture
     WGPUImageCopyTexture destination;
-    destination.nextInChain = nullptr;
     destination.texture = texture;
     destination.mipLevel = 0;
     destination.origin = { 0, 0, 0 };

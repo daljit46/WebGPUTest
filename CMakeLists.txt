@@ -45,7 +45,7 @@ set(TINT_BUILD_AS_OTHER_OS OFF)
 set(TINT_BUILD_REMOTE_COMPILE OFF)
 
 add_subdirectory(dawn EXCLUDE_FROM_ALL)
-add_subdirectory(glfw3webgpu)
+# add_subdirectory(glfw3webgpu)
 
 set(IMGUI_SOURCES
     imgui/imconfig.h
@@ -66,7 +66,7 @@ set(IMGUI_SOURCES
 add_executable(WebGPUTest 
     main.cpp
     utils.cpp
-    ${IMGUI_SOURCES}
+    # ${IMGUI_SOURCES}
     application.h application.cpp
     stb_image.h
 )
@@ -74,8 +74,6 @@ add_executable(WebGPUTest
 target_link_libraries(WebGPUTest PRIVATE
     webgpu_dawn
     webgpu_cpp
-    webgpu_glfw
-    glfw3webgpu
     Threads::Threads
 )
 
