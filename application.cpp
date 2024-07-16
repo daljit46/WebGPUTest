@@ -1,8 +1,13 @@
 #include "application.h"
 #include "utils.h"
+#include "webgpu/webgpu.h"
 
+#include <array>
+#include <cstdint>
 #include <iostream>
 #include <cmath>
+#include <stdexcept>
+#include <vector>
 
 namespace {
 void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue) {
@@ -36,6 +41,7 @@ void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue) {
 Application::Application()
 {
     initDevice();
+    initBenchmark();
     initBindGroupLayout();
     initComputePipeline();
     initBuffers();
@@ -48,20 +54,22 @@ Application::~Application()
     terminateBuffers();
     terminateComputePipeline();
     terminateBindGroupLayout();
+    terminateBenchmark();
     terminateDevice();
 }
 
 void Application::onCompute()
 {
-    std::vector<WGPURenderPassTimestampWrites> timestampWrites(2);
+    std::vector<WGPUComputePassTimestampWrites> timestampWrites(2);
     timestampWrites[0].querySet = m_timestampQuerySet;
     timestampWrites[0].beginningOfPassWriteIndex = 0;
     timestampWrites[0].endOfPassWriteIndex = 1;
+
     // Fill in the input buffer
     std::vector<float> input(m_bufferSize / sizeof(float));
     // fill the input buffer with the entries of 100x1000 matrix
-    constexpr int rowCount = 5;
-    constexpr int colCount = 5;
+    constexpr int rowCount = 1000;
+    constexpr int colCount = 1000;
     for (auto i = 0; i < rowCount; ++i) {
         for (auto j = 0; j < colCount; ++j) {
             input[i * colCount + j] = i * colCount + j;
@@ -79,7 +87,6 @@ void Application::onCompute()
     computePassDesc.label = "Compute pass";
     computePassDesc.nextInChain = nullptr;
     computePassDesc.timestampWrites = timestampWrites.data();
-    computePassDesc.timestampWriteCount = static_cast<uint32_t>(timestampWrites.size());
 
     WGPUComputePassEncoder computePass = wgpuCommandEncoderBeginComputePass(encoder, &computePassDesc);
     wgpuComputePassEncoderSetPipeline(computePass, m_computePipeline);
@@ -96,11 +103,18 @@ void Application::onCompute()
 
     wgpuComputePassEncoderEnd(computePass);
     wgpuCommandEncoderCopyBufferToBuffer(encoder, m_outputBuffer, 0, m_mapBuffer, 0, m_bufferSize);
+    resolveTimestamps(encoder);
+
+    auto onQueueWorkDone = [](WGPUQueueWorkDoneStatus status, void*) {
+        std::cout << "Queue work done with status: " << status << std::endl;
+    };
+    wgpuQueueOnSubmittedWorkDone(m_queue, onQueueWorkDone, (void*)this);
 
     auto command = wgpuCommandEncoderFinish(encoder, nullptr);
     wgpuQueueSubmit(m_queue, 1, &command);
-     
-        // Set up callback for map buffer
+    fetchTimestamps();
+
+    // Set up callback for map buffer
     struct Context {
         WGPUBuffer mapBuffer = nullptr;
         int32_t size = 0;
@@ -112,38 +126,44 @@ void Application::onCompute()
         auto *context = reinterpret_cast<Context*>(userdata);
         if (status == WGPUBufferMapAsyncStatus_Success) {
             auto *output = (const float*)wgpuBufferGetConstMappedRange(context->mapBuffer, 0, context->size);
-            for(size_t i = 0; i < context->size / sizeof(float); ++i) {
-                std::cout << "Input: " << context->input->at(i) << " Output: " << output[i] << std::endl;
-            }
+            std::cout << "Output buffer mapped!" << std::endl;
             wgpuBufferUnmap(context->mapBuffer);
         }
         else {
-            throw std::runtime_error("Failed to map buffer!");
+            throw std::runtime_error("Failed to map output buffer!");
         }
         context->done = true;
     };
     Context context{m_mapBuffer, m_bufferSize, false, &input};
     wgpuBufferMapAsync(m_mapBuffer, WGPUBufferUsage_MapRead, 0, m_bufferSize, onBufferMapped, (void*)&context);
 
-    while(!context.done) {
-        wgpuInstanceProcessEvents(m_instance);
+    while (!m_timestampFetched) {
+        wgpuDeviceTick(m_device);
     }
 }
 
 void Application::initBenchmark()
 {
+    // init the timestamp query set
     WGPUQuerySetDescriptor querySetDesc = {};
+    querySetDesc.nextInChain = nullptr;
     querySetDesc.type = WGPUQueryType_Timestamp;
     querySetDesc.count = 2;
     m_timestampQuerySet = wgpuDeviceCreateQuerySet(m_device, &querySetDesc);
 
-    // init the timestamp buffer
-    WGPUBufferDescriptor timestampBufferDesc = {};
-    timestampBufferDesc.nextInChain = nullptr;
-    timestampBufferDesc.label = "Timestamp buffer";
-    timestampBufferDesc.size = 2 * sizeof(uint64_t);
-    timestampBufferDesc.usage = WGPUBufferUsage_QueryResolve;
-    m_timestampBuffer = wgpuDeviceCreateBuffer(m_device, &timestampBufferDesc);
+    // init the timestamp resolve buffer
+    WGPUBufferDescriptor timeStampBufferDesc = {};
+    timeStampBufferDesc.nextInChain = nullptr;
+    timeStampBufferDesc.label = "Timestamp buffer";
+    timeStampBufferDesc.size = querySetDesc.count * sizeof(uint64_t);
+    timeStampBufferDesc.usage = WGPUBufferUsage_QueryResolve | WGPUBufferUsage_CopySrc;
+    timeStampBufferDesc.mappedAtCreation = false;
+    m_timestampResolveBuffer = wgpuDeviceCreateBuffer(m_device, &timeStampBufferDesc);
+
+    // init the timestamp map buffer
+    timeStampBufferDesc.label = "Timestamp map buffer";
+    timeStampBufferDesc.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+    m_timestampMapBuffer = wgpuDeviceCreateBuffer(m_device, &timeStampBufferDesc);
 }
 
 void Application::initDevice()
@@ -169,7 +189,7 @@ void Application::initDevice()
 
     m_adapter = Utils::requestAdapter(m_instance, &adapterOpts);
 
-        // Setup limits
+    // Setup limits
     WGPUSupportedLimits supportedLimits {};
     wgpuAdapterGetLimits(m_adapter, &supportedLimits);
 
@@ -280,7 +300,7 @@ void Application::initComputePipeline()
 
 void Application::initBuffers()
 {
-    m_bufferSize = 25 * sizeof(float);
+    m_bufferSize = 1000 * 1000 * sizeof(float);
 
     // Create input buffers
     WGPUBufferDescriptor inputBufferDesc = {};
@@ -352,6 +372,10 @@ void Application::initBindGroup()
 void Application::terminateBenchmark()
 {
     wgpuQuerySetRelease(m_timestampQuerySet);
+    wgpuBufferDestroy(m_timestampResolveBuffer);
+    wgpuBufferRelease(m_timestampResolveBuffer);
+    wgpuBufferDestroy(m_timestampMapBuffer);
+    wgpuBufferRelease(m_timestampMapBuffer);
 }
 
 void Application::terminateDevice()
@@ -389,7 +413,31 @@ void Application::terminateBindGroup()
     wgpuBindGroupRelease(m_bindGroup);
 }
 
-void Application::fetchTimestamps(WGPUCommandEncoder encoder)
+void Application::resolveTimestamps(WGPUCommandEncoder encoder)
 {
+    wgpuCommandEncoderResolveQuerySet(encoder, m_timestampQuerySet, 0, 2, m_timestampResolveBuffer, 0);
+    wgpuCommandEncoderCopyBufferToBuffer(encoder, m_timestampResolveBuffer, 0, m_timestampMapBuffer, 0, 2 * sizeof(uint64_t));
+}
+
+void Application::fetchTimestamps()
+{
+    auto onTimeStampBufferMapped = [](WGPUBufferMapAsyncStatus status, void* userdata) {
+        auto app = reinterpret_cast<Application*>(userdata);
+        std::cout << "Timestamp buffer mapped!" << std::endl;
+        if (status == WGPUBufferMapAsyncStatus_Success) {
+            auto *timestamps = (const uint64_t*)wgpuBufferGetConstMappedRange(app->m_timestampMapBuffer, 0, 2 * sizeof(uint64_t));
+            // Calculate the time taken
+            double timeTakenNanosecs = (timestamps[1] - timestamps[0]);
+            double timeTakenMillisecs = timeTakenNanosecs / 1000000;
+            std::cout << "Time taken: " << timeTakenMillisecs << "ms" << std::endl;
+            std::cout << "Time taken: " << timeTakenNanosecs << "ns" << std::endl;
+            wgpuBufferUnmap(app->m_timestampMapBuffer);
+        }
+        else {
+            throw std::runtime_error("Failed to map buffer!");
+        }
+        app->m_timestampFetched = true;
+    };
+    wgpuBufferMapAsync(m_timestampMapBuffer, WGPUMapMode_Read, 0, 2 * sizeof(uint64_t), onTimeStampBufferMapped, (void*)this);
 }
 

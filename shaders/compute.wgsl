@@ -1,12 +1,12 @@
-@group(0) @binding(0) var<storage,read> inputBuffer1: array<f32,25>;
-@group(0) @binding(1) var<storage,read> inputBuffer2: array<f32,25>;
-@group(0) @binding(2) var<storage,read_write> outputBuffer: array<f32,25>;
+@group(0) @binding(0) var<storage,read> inputBuffer1: array<f32,1000000>;
+@group(0) @binding(1) var<storage,read> inputBuffer2: array<f32,1000000>;
+@group(0) @binding(2) var<storage,read_write> outputBuffer: array<f32,1000000>;
 
 
 @compute @workgroup_size(32, 1, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    const matrix_size : u32 = 5;
-    // the input buffer is a 100x100 matrix of floats
+    const matrix_size : u32 = 1000;
+    // the input buffer is a 1000x1000 matrix of floats
     // let's get the row and column of the current invocation
     let row = global_id.x / matrix_size;
     let col = matrix_size - (global_id.x % matrix_size) - 1;

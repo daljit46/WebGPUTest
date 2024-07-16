@@ -27,7 +27,8 @@ private:
     void terminateBuffers();
     void terminateBindGroup();
 
-    void fetchTimestamps(WGPUCommandEncoder commandEncoder);
+    void resolveTimestamps(WGPUCommandEncoder commandEncoder);
+    void fetchTimestamps();
 
     WGPUInstance m_instance = nullptr;
     WGPUAdapter m_adapter = nullptr;
@@ -43,7 +44,9 @@ private:
     WGPUBindGroup m_bindGroup = nullptr;
     WGPUShaderModule m_shaderModule = nullptr;
     WGPUQuerySet m_timestampQuerySet = nullptr;
-    WGPUBuffer m_timestampBuffer = nullptr;
+    WGPUBuffer m_timestampResolveBuffer = nullptr;
+    WGPUBuffer m_timestampMapBuffer = nullptr;
+    bool m_timestampFetched = false;
 
     int32_t m_bufferSize = 0;
 };
