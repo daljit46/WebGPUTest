@@ -6,10 +6,54 @@
 #include <cstdint>
 #include <iostream>
 #include <cmath>
+#include <span>
 #include <stdexcept>
 #include <vector>
+#include <random>
+
+constexpr int matrixSize = 10;
 
 namespace {
+
+bool verifyMatrixMultiplicationResult(const std::vector<float>& m1, std::span<const float> result)
+{
+    std::cout << "Verifying matrix multiplication result..." << std::endl;
+
+    // compute m1 * m1
+    std::vector<float> expected(matrixSize * matrixSize);
+    for (auto i = 0; i < matrixSize; ++i) {
+        for (auto j = 0; j < matrixSize; ++j) {
+            expected[i * matrixSize + j] = 0;
+            for (auto k = 0; k < matrixSize; ++k) {
+                expected[i * matrixSize + j] += m1[i * matrixSize + k] * m1[k * matrixSize + j];
+            }
+        }
+    }
+
+    // compare the result with expected
+    int mismatch_count = 0;
+    for (auto i = 0; i < matrixSize; ++i) {
+        for (auto j = 0; j < matrixSize; ++j) {
+            if (std::abs(expected[i * matrixSize + j] - result[i * matrixSize + j]) > 1e-8) {
+                std::cout << std::setprecision(10);
+                std::cout << "Mismatch at (" << i << ", " << j << "): expected " << expected[i * matrixSize + j] << " but got " << result[i * matrixSize + j] << std::endl;
+                std::cout << "Result differs by " << std::abs(expected[i * matrixSize + j] - result[i * matrixSize + j]) << std::endl;
+                // return false;
+                ++mismatch_count;
+            }
+        }
+    }
+
+    std::cout << "Mismatch count: " << mismatch_count << std::endl;
+
+    std::cout << "Matrix multiplication result verified!" << std::endl;
+
+    if(mismatch_count > 0) {
+        return false;
+    }
+    return true;
+}
+
 void setWGPUCallbacks(WGPUDevice device, WGPUQueue queue) {
     auto onDeviceError = [](WGPUErrorType type, char const *message,
                             void * /* pUserData */) {
@@ -46,6 +90,18 @@ Application::Application()
     initComputePipeline();
     initBuffers();
     initBindGroup();
+
+    // Fill in the input buffer
+    // generate random data
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> dis(0.0, 1.0);
+    inputMatrix.reserve(m_bufferSize / sizeof(float));
+    for (auto i = 0; i < matrixSize; ++i) {
+        for (auto j = 0; j < matrixSize; ++j) {
+            inputMatrix[i * matrixSize + j] = dis(gen);
+        }
+    }
 }
 
 Application::~Application()
@@ -65,18 +121,8 @@ void Application::onCompute()
     timestampWrites[0].beginningOfPassWriteIndex = 0;
     timestampWrites[0].endOfPassWriteIndex = 1;
 
-    // Fill in the input buffer
-    std::vector<float> input(m_bufferSize / sizeof(float));
-    // fill the input buffer with the entries of 100x1000 matrix
-    constexpr int rowCount = 1000;
-    constexpr int colCount = 1000;
-    for (auto i = 0; i < rowCount; ++i) {
-        for (auto j = 0; j < colCount; ++j) {
-            input[i * colCount + j] = i * colCount + j;
-        }
-    }
-    wgpuQueueWriteBuffer(m_queue, m_inputBuffer1, 0, input.data(), m_bufferSize);
-    wgpuQueueWriteBuffer(m_queue, m_inputBuffer2, 0, input.data(), m_bufferSize);
+    wgpuQueueWriteBuffer(m_queue, m_inputBuffer1, 0, inputMatrix.data(), m_bufferSize);
+    wgpuQueueWriteBuffer(m_queue, m_inputBuffer2, 0, inputMatrix.data(), m_bufferSize);
 
     WGPUCommandEncoderDescriptor encoderDesc = {};
     encoderDesc.nextInChain = nullptr;
@@ -126,6 +172,8 @@ void Application::onCompute()
         auto *context = reinterpret_cast<Context*>(userdata);
         if (status == WGPUBufferMapAsyncStatus_Success) {
             auto *output = (const float*)wgpuBufferGetConstMappedRange(context->mapBuffer, 0, context->size);
+            std::span<const float> outputSpan(output, context->size / sizeof(float));
+            verifyMatrixMultiplicationResult(*context->input, outputSpan);
             std::cout << "Output buffer mapped!" << std::endl;
             wgpuBufferUnmap(context->mapBuffer);
         }
@@ -134,7 +182,7 @@ void Application::onCompute()
         }
         context->done = true;
     };
-    Context context{m_mapBuffer, m_bufferSize, false, &input};
+    Context context{m_mapBuffer, m_bufferSize, false, &inputMatrix};
     wgpuBufferMapAsync(m_mapBuffer, WGPUBufferUsage_MapRead, 0, m_bufferSize, onBufferMapped, (void*)&context);
 
     while (!m_timestampFetched) {
@@ -206,7 +254,7 @@ void Application::initDevice()
     requiredLimits.limits.maxComputeWorkgroupSizeY = 1;
     requiredLimits.limits.maxComputeWorkgroupSizeZ = 1;
     requiredLimits.limits.maxComputeInvocationsPerWorkgroup = 32;
-    requiredLimits.limits.maxComputeWorkgroupsPerDimension = 2;
+    requiredLimits.limits.maxComputeWorkgroupsPerDimension = 32;
 
     std::vector<WGPUFeatureName> features;
     if(wgpuAdapterHasFeature(m_adapter, WGPUFeatureName::WGPUFeatureName_TimestampQuery)) {
@@ -300,7 +348,7 @@ void Application::initComputePipeline()
 
 void Application::initBuffers()
 {
-    m_bufferSize = 1000 * 1000 * sizeof(float);
+    m_bufferSize = matrixSize * matrixSize * sizeof(float);
 
     // Create input buffers
     WGPUBufferDescriptor inputBufferDesc = {};

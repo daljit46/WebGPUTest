@@ -48,5 +48,6 @@ private:
     WGPUBuffer m_timestampMapBuffer = nullptr;
     bool m_timestampFetched = false;
 
+    std::vector<float> inputMatrix;
     int32_t m_bufferSize = 0;
 };
