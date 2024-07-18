@@ -82,6 +82,7 @@ target_include_directories(WebGPUTest PRIVATE
 )
 
 add_custom_target(Shaders SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/compute.wgsl
     ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shader.wgsl
 )
 
