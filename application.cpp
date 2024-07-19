@@ -30,27 +30,53 @@ bool verifyMatrixMultiplicationResult(const std::vector<float>& m1, std::span<co
         }
     }
 
+    // // print input matrix
+    // std::cout << "Input matrix:" << std::endl;
+    // for (auto i = 0; i < matrixSize; ++i) {
+    //     for (auto j = 0; j < matrixSize; ++j) {
+    //         std::cout << m1[i * matrixSize + j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // // print expected result
+    // std::cout << "Expected result:" << std::endl;
+    // for (auto i = 0; i < matrixSize; ++i) {
+    //     for (auto j = 0; j < matrixSize; ++j) {
+    //         std::cout << expected[i * matrixSize + j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // // print result
+    // std::cout << "Result:" << std::endl;
+    // for (auto i = 0; i < matrixSize; ++i) {
+    //     for (auto j = 0; j < matrixSize; ++j) {
+    //         std::cout << result[i * matrixSize + j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
     // compare the result with expected
     int mismatch_count = 0;
+    float max_error = 0.0f;
     for (auto i = 0; i < matrixSize; ++i) {
         for (auto j = 0; j < matrixSize; ++j) {
-            if (std::abs(expected[i * matrixSize + j] - result[i * matrixSize + j]) > 1e-8) {
+            const float error = std::abs(expected[i * matrixSize + j] - result[i * matrixSize + j]);
+            max_error = std::max(max_error, error);
+            if (error > 1e-8) {
                 std::cout << std::setprecision(10);
-                std::cout << "Mismatch at (" << i << ", " << j << "): expected " << expected[i * matrixSize + j] << " but got " << result[i * matrixSize + j] << std::endl;
-                std::cout << "Result differs by " << std::abs(expected[i * matrixSize + j] - result[i * matrixSize + j]) << std::endl;
-                // return false;
                 ++mismatch_count;
             }
         }
     }
 
-    std::cout << "Mismatch count: " << mismatch_count << std::endl;
-
-    std::cout << "Matrix multiplication result verified!" << std::endl;
-
     if(mismatch_count > 0) {
+        std::cout << "Mismatch count: " << mismatch_count << std::endl;
+        std::cout << "Max error: " << max_error << std::endl;
+        std::cout << "Matrix multiplication result verification failed!" << std::endl;
         return false;
     }
+
+    std::cout << "Matrix multiplication result verified!" << std::endl;
     return true;
 }
 
