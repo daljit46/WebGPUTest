@@ -121,7 +121,7 @@ Application::Application()
     // generate random data
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_real_distribution<float> dis(0.0, 1.0);
+    std::uniform_real_distribution<float> dis(0.0, 1000.0);
     inputMatrix.reserve(m_bufferSize / sizeof(float));
     for (auto i = 0; i < matrixSize; ++i) {
         for (auto j = 0; j < matrixSize; ++j) {
