@@ -11,59 +11,63 @@
 #include <vector>
 #include <random>
 
-constexpr int matrixSize = 10;
+constexpr uint32_t matrixLength = 1000;
+constexpr bool printMatrices = false;
 
 namespace {
 
 bool verifyMatrixMultiplicationResult(const std::vector<float>& m1, std::span<const float> result)
 {
     std::cout << "Verifying matrix multiplication result..." << std::endl;
+    std::cout << std::setprecision(10);
 
     // compute m1 * m1
-    std::vector<float> expected(matrixSize * matrixSize);
-    for (auto i = 0; i < matrixSize; ++i) {
-        for (auto j = 0; j < matrixSize; ++j) {
-            expected[i * matrixSize + j] = 0;
-            for (auto k = 0; k < matrixSize; ++k) {
-                expected[i * matrixSize + j] += m1[i * matrixSize + k] * m1[k * matrixSize + j];
+    std::vector<float> expected(matrixLength * matrixLength);
+    for (auto i = 0; i < matrixLength; ++i) {
+        for (auto j = 0; j < matrixLength; ++j) {
+            expected[i * matrixLength + j] = 0;
+            for (auto k = 0; k < matrixLength; ++k) {
+                expected[i * matrixLength + j] += m1[i * matrixLength + k] * m1[k * matrixLength + j];
             }
         }
     }
 
-    // // print input matrix
-    // std::cout << "Input matrix:" << std::endl;
-    // for (auto i = 0; i < matrixSize; ++i) {
-    //     for (auto j = 0; j < matrixSize; ++j) {
-    //         std::cout << m1[i * matrixSize + j] << " ";
-    //     }
-    //     std::cout << std::endl;
-    // }
-    // // print expected result
-    // std::cout << "Expected result:" << std::endl;
-    // for (auto i = 0; i < matrixSize; ++i) {
-    //     for (auto j = 0; j < matrixSize; ++j) {
-    //         std::cout << expected[i * matrixSize + j] << " ";
-    //     }
-    //     std::cout << std::endl;
-    // }
-    // // print result
-    // std::cout << "Result:" << std::endl;
-    // for (auto i = 0; i < matrixSize; ++i) {
-    //     for (auto j = 0; j < matrixSize; ++j) {
-    //         std::cout << result[i * matrixSize + j] << " ";
-    //     }
-    //     std::cout << std::endl;
-    // }
+    if(printMatrices) {
+        // print input matrix
+        std::cout << "Input matrix:" << std::endl;
+        for (auto i = 0; i < matrixLength; ++i) {
+            for (auto j = 0; j < matrixLength; ++j) {
+                std::cout << m1[i * matrixLength + j] << " ";
+            }
+            std::cout << std::endl;
+        }
+        // print expected result
+        std::cout << "Expected result:" << std::endl;
+        for (auto i = 0; i < matrixLength; ++i) {
+            for (auto j = 0; j < matrixLength; ++j) {
+                std::cout << expected[i * matrixLength + j] << " ";
+            }
+            std::cout << std::endl;
+        }
+        // print result
+        std::cout << "Result:" << std::endl;
+        for (auto i = 0; i < matrixLength; ++i) {
+            for (auto j = 0; j < matrixLength; ++j) {
+                std::cout << result[i * matrixLength + j] << " ";
+            }
+            std::cout << std::endl;
+        }
+
+    }
 
     // compare the result with expected
     int mismatch_count = 0;
     float max_error = 0.0f;
-    for (auto i = 0; i < matrixSize; ++i) {
-        for (auto j = 0; j < matrixSize; ++j) {
-            const float error = std::abs(expected[i * matrixSize + j] - result[i * matrixSize + j]);
+    for (auto i = 0; i < matrixLength; ++i) {
+        for (auto j = 0; j < matrixLength; ++j) {
+            const float error = std::abs(expected[i * matrixLength + j] - result[i * matrixLength + j]);
             max_error = std::max(max_error, error);
-            if (error > 1e-8) {
-                std::cout << std::setprecision(10);
+            if (error > 1e-5) {
                 ++mismatch_count;
             }
         }
@@ -121,11 +125,11 @@ Application::Application()
     // generate random data
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_real_distribution<float> dis(0.0, 1000.0);
-    inputMatrix.reserve(m_bufferSize / sizeof(float));
-    for (auto i = 0; i < matrixSize; ++i) {
-        for (auto j = 0; j < matrixSize; ++j) {
-            inputMatrix[i * matrixSize + j] = dis(gen);
+    std::uniform_real_distribution<float> dis(0.0, 100.0);
+    inputMatrix.reserve(m_inputBufferSize / sizeof(float));
+    for (auto i = 0; i < matrixLength; ++i) {
+        for (auto j = 0; j < matrixLength; ++j) {
+            inputMatrix[i * matrixLength + j] = dis(gen);
         }
     }
 }
@@ -147,8 +151,9 @@ void Application::onCompute()
     timestampWrites[0].beginningOfPassWriteIndex = 0;
     timestampWrites[0].endOfPassWriteIndex = 1;
 
-    wgpuQueueWriteBuffer(m_queue, m_inputBuffer1, 0, inputMatrix.data(), m_bufferSize);
-    wgpuQueueWriteBuffer(m_queue, m_inputBuffer2, 0, inputMatrix.data(), m_bufferSize);
+    wgpuQueueWriteBuffer(m_queue, m_uniformBuffer, 0, &matrixLength, sizeof(uint32_t));
+    wgpuQueueWriteBuffer(m_queue, m_inputBuffer1, 0, inputMatrix.data(), m_inputBufferSize);
+    wgpuQueueWriteBuffer(m_queue, m_inputBuffer2, 0, inputMatrix.data(), m_inputBufferSize);
 
     WGPUCommandEncoderDescriptor encoderDesc = {};
     encoderDesc.nextInChain = nullptr;
@@ -165,16 +170,16 @@ void Application::onCompute()
     wgpuComputePassEncoderSetBindGroup(computePass, 0, m_bindGroup, 0, nullptr);
 
     // Deduce number of workgroups
-    uint32_t invocationCount = m_bufferSize / sizeof(float);
-    uint32_t workgroupSize = 32;
-    uint32_t workgroupCount = std::ceil(invocationCount / static_cast<float>(workgroupSize));
+    uint32_t invocationCount = m_inputBufferSize / sizeof(float);
+    uint32_t workgroupSize = 16 * 16;
+    uint32_t workgroupCount = std::ceil(std::sqrt(invocationCount / static_cast<float>(workgroupSize)));
 
     std::cout << "Invocations: " << invocationCount << " Workgroup size: " << workgroupSize << " Workgroup count: " << workgroupCount << std::endl;
 
-    wgpuComputePassEncoderDispatchWorkgroups(computePass, workgroupCount, 1, 1);
+    wgpuComputePassEncoderDispatchWorkgroups(computePass, workgroupCount, workgroupCount, 1);
 
     wgpuComputePassEncoderEnd(computePass);
-    wgpuCommandEncoderCopyBufferToBuffer(encoder, m_outputBuffer, 0, m_mapBuffer, 0, m_bufferSize);
+    wgpuCommandEncoderCopyBufferToBuffer(encoder, m_outputBuffer, 0, m_mapBuffer, 0, m_inputBufferSize);
     resolveTimestamps(encoder);
 
     auto onQueueWorkDone = [](WGPUQueueWorkDoneStatus status, void*) {
@@ -208,8 +213,8 @@ void Application::onCompute()
         }
         context->done = true;
     };
-    Context context{m_mapBuffer, m_bufferSize, false, &inputMatrix};
-    wgpuBufferMapAsync(m_mapBuffer, WGPUBufferUsage_MapRead, 0, m_bufferSize, onBufferMapped, (void*)&context);
+    Context context{m_mapBuffer, m_inputBufferSize, false, &inputMatrix};
+    wgpuBufferMapAsync(m_mapBuffer, WGPUBufferUsage_MapRead, 0, m_inputBufferSize, onBufferMapped, (void*)&context);
 
     while (!m_timestampFetched) {
         wgpuDeviceTick(m_device);
@@ -275,7 +280,7 @@ void Application::initDevice()
     requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
     requiredLimits.limits.maxBindGroups = 2;
     requiredLimits.limits.maxStorageBuffersPerShaderStage = 2;
-    requiredLimits.limits.maxStorageBufferBindingSize = m_bufferSize;
+    requiredLimits.limits.maxStorageBufferBindingSize = m_inputBufferSize;
     requiredLimits.limits.maxComputeWorkgroupSizeX = 32;
     requiredLimits.limits.maxComputeWorkgroupSizeY = 1;
     requiredLimits.limits.maxComputeWorkgroupSizeZ = 1;
@@ -316,28 +321,36 @@ void Application::initDevice()
 
 void Application::initBindGroupLayout()
 {
+    // Uniform buffer
+    WGPUBindGroupLayoutEntry uniformBufferLayoutEntry = {};
+    uniformBufferLayoutEntry.nextInChain = nullptr;
+    uniformBufferLayoutEntry.binding = 0;
+    uniformBufferLayoutEntry.visibility = WGPUShaderStage_Compute;
+    uniformBufferLayoutEntry.buffer.type = WGPUBufferBindingType_Uniform;
+
     // Input buffer 1
     WGPUBindGroupLayoutEntry inputBufferLayoutEntry1 = {};
     inputBufferLayoutEntry1.nextInChain = nullptr;
-    inputBufferLayoutEntry1.binding = 0;
+    inputBufferLayoutEntry1.binding = 1;
     inputBufferLayoutEntry1.visibility = WGPUShaderStage_Compute;
     inputBufferLayoutEntry1.buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
 
     // Input buffer 2
     WGPUBindGroupLayoutEntry inputBufferLayoutEntry2 = {};
     inputBufferLayoutEntry2.nextInChain = nullptr;
-    inputBufferLayoutEntry2.binding = 1;
+    inputBufferLayoutEntry2.binding = 2;
     inputBufferLayoutEntry2.visibility = WGPUShaderStage_Compute;
     inputBufferLayoutEntry2.buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
 
     // Output buffer
     WGPUBindGroupLayoutEntry outputBufferLayoutEntry = {};
     outputBufferLayoutEntry.nextInChain = nullptr;
-    outputBufferLayoutEntry.binding = 2;
+    outputBufferLayoutEntry.binding = 3;
     outputBufferLayoutEntry.visibility = WGPUShaderStage_Compute;
     outputBufferLayoutEntry.buffer.type = WGPUBufferBindingType_Storage;
 
-    std::array<WGPUBindGroupLayoutEntry, 3> bindGroupLayoutEntries = {
+    std::array<WGPUBindGroupLayoutEntry, 4> bindGroupLayoutEntries = {
+        uniformBufferLayoutEntry,
         inputBufferLayoutEntry1,
         inputBufferLayoutEntry2,
         outputBufferLayoutEntry
@@ -374,13 +387,20 @@ void Application::initComputePipeline()
 
 void Application::initBuffers()
 {
-    m_bufferSize = matrixSize * matrixSize * sizeof(float);
+    WGPUBufferDescriptor uniformBufferDesc = {};
+    uniformBufferDesc.nextInChain = nullptr;
+    uniformBufferDesc.label = "Uniform buffer";
+    uniformBufferDesc.size = 4 * sizeof(uint32_t);
+    uniformBufferDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+    m_uniformBuffer = wgpuDeviceCreateBuffer(m_device, &uniformBufferDesc);
+
+    m_inputBufferSize = matrixLength * matrixLength * sizeof(float);
 
     // Create input buffers
     WGPUBufferDescriptor inputBufferDesc = {};
     inputBufferDesc.nextInChain = nullptr;
     inputBufferDesc.label = "Input buffer 1";
-    inputBufferDesc.size = m_bufferSize;
+    inputBufferDesc.size = m_inputBufferSize;
     inputBufferDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
 
     m_inputBuffer1 = wgpuDeviceCreateBuffer(m_device, &inputBufferDesc);
@@ -391,7 +411,7 @@ void Application::initBuffers()
     WGPUBufferDescriptor outputBufferDesc = {};
     outputBufferDesc.nextInChain = nullptr;
     outputBufferDesc.label = "Output buffer";
-    outputBufferDesc.size = m_bufferSize;
+    outputBufferDesc.size = m_inputBufferSize;
     outputBufferDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc;
 
     m_outputBuffer = wgpuDeviceCreateBuffer(m_device, &outputBufferDesc);
@@ -399,7 +419,7 @@ void Application::initBuffers()
     WGPUBufferDescriptor mapBufferDesc = {};
     mapBufferDesc.nextInChain = nullptr;
     mapBufferDesc.label = "Map buffer";
-    mapBufferDesc.size = m_bufferSize;
+    mapBufferDesc.size = m_inputBufferSize;
     mapBufferDesc.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
 
     m_mapBuffer = wgpuDeviceCreateBuffer(m_device, &mapBufferDesc);
@@ -407,28 +427,36 @@ void Application::initBuffers()
 
 void Application::initBindGroup()
 {
+    WGPUBindGroupEntry uniformEntry = {};
+    uniformEntry.nextInChain = nullptr;
+    uniformEntry.binding = 0;
+    uniformEntry.buffer = m_uniformBuffer;
+    uniformEntry.offset = 0;
+    uniformEntry.size = 4 * sizeof(uint32_t);
+
     WGPUBindGroupEntry inputEntry1 = {};
     inputEntry1.nextInChain = nullptr;
-    inputEntry1.binding = 0;
+    inputEntry1.binding = 1;
     inputEntry1.buffer = m_inputBuffer1;
     inputEntry1.offset = 0;
-    inputEntry1.size = m_bufferSize;
+    inputEntry1.size = m_inputBufferSize;
 
     WGPUBindGroupEntry inputEntry2 = {};
     inputEntry2.nextInChain = nullptr;
-    inputEntry2.binding = 1;
+    inputEntry2.binding = 2;
     inputEntry2.buffer = m_inputBuffer2;
     inputEntry2.offset = 0;
-    inputEntry2.size = m_bufferSize;
+    inputEntry2.size = m_inputBufferSize;
 
     WGPUBindGroupEntry outputEntry = {};
     outputEntry.nextInChain = nullptr;
-    outputEntry.binding = 2;
+    outputEntry.binding = 3;
     outputEntry.buffer = m_outputBuffer;
     outputEntry.offset = 0;
-    outputEntry.size = m_bufferSize;
+    outputEntry.size = m_inputBufferSize;
 
-    std::array<WGPUBindGroupEntry, 3> bindGroupEntries = {
+    std::array bindGroupEntries = {
+        uniformEntry,
         inputEntry1,
         inputEntry2,
         outputEntry
@@ -472,6 +500,8 @@ void Application::terminateComputePipeline()
 
 void Application::terminateBuffers()
 {
+    wgpuBufferDestroy(m_uniformBuffer);
+    wgpuBufferRelease(m_uniformBuffer);
     wgpuBufferDestroy(m_inputBuffer1);
     wgpuBufferRelease(m_inputBuffer1);
     wgpuBufferDestroy(m_inputBuffer2);
@@ -505,6 +535,12 @@ void Application::fetchTimestamps()
             double timeTakenMillisecs = timeTakenNanosecs / 1000000;
             std::cout << "Time taken: " << timeTakenMillisecs << "ms" << std::endl;
             std::cout << "Time taken: " << timeTakenNanosecs << "ns" << std::endl;
+
+            // Calculate Gigaflops
+            double flops = 2 * matrixLength * matrixLength * matrixLength;
+            double flopsPerSec = flops * (1000 / timeTakenMillisecs);
+            std::cout << "Gigaflops per seconds: " << (flopsPerSec / 1e9)  << std::endl;
+
             wgpuBufferUnmap(app->m_timestampMapBuffer);
         }
         else {

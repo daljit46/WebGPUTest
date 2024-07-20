@@ -40,6 +40,7 @@ private:
     WGPUBuffer m_inputBuffer2 = nullptr;
     WGPUBuffer m_outputBuffer = nullptr;
     WGPUBuffer m_mapBuffer = nullptr;
+    WGPUBuffer m_uniformBuffer = nullptr;
     WGPUBindGroupLayout m_bindGroupLayout = nullptr;
     WGPUBindGroup m_bindGroup = nullptr;
     WGPUShaderModule m_shaderModule = nullptr;
@@ -49,5 +50,5 @@ private:
     bool m_timestampFetched = false;
 
     std::vector<float> inputMatrix;
-    int32_t m_bufferSize = 0;
+    int32_t m_inputBufferSize = 0;
 };
