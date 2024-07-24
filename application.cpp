@@ -171,12 +171,13 @@ void Application::onCompute()
 
     // Deduce number of workgroups
     uint32_t invocationCount = m_inputBufferSize / sizeof(float);
-    uint32_t workgroupSize = 16 * 16;
-    uint32_t workgroupCount = std::ceil(std::sqrt(invocationCount / static_cast<float>(workgroupSize)));
+    uint32_t workgroupSize = 8 * 8;
+    uint32_t workgroupCountPerSide = std::ceil(std::sqrt(invocationCount / static_cast<float>(workgroupSize)));
 
-    std::cout << "Invocations: " << invocationCount << " Workgroup size: " << workgroupSize << " Workgroup count: " << workgroupCount << std::endl;
+    std::cout << "Invocations: " << invocationCount << " Workgroup size: " << workgroupSize << " Workgroup count: "
+              << workgroupCountPerSide * workgroupCountPerSide << std::endl;
 
-    wgpuComputePassEncoderDispatchWorkgroups(computePass, workgroupCount, workgroupCount, 1);
+    wgpuComputePassEncoderDispatchWorkgroups(computePass, workgroupCountPerSide, workgroupCountPerSide, 1);
 
     wgpuComputePassEncoderEnd(computePass);
     wgpuCommandEncoderCopyBufferToBuffer(encoder, m_outputBuffer, 0, m_mapBuffer, 0, m_inputBufferSize);
@@ -537,9 +538,9 @@ void Application::fetchTimestamps()
             std::cout << "Time taken: " << timeTakenNanosecs << "ns" << std::endl;
 
             // Calculate Gigaflops
-            double flops = 2 * matrixLength * matrixLength * matrixLength;
-            double flopsPerSec = flops * (1000 / timeTakenMillisecs);
-            std::cout << "Gigaflops per seconds: " << (flopsPerSec / 1e9)  << std::endl;
+            double flops = 2 * std::pow(matrixLength, 3.0);
+            double flopsPerSec = flops * (1000 / timeTakenMillisecs) / 1e9;
+            std::cout << "Gigaflops per seconds: " << flopsPerSec << std::endl;
 
             wgpuBufferUnmap(app->m_timestampMapBuffer);
         }
