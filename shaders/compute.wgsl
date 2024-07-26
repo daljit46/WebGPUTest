@@ -7,10 +7,10 @@
 
 // Submatrices of inputBuffer1 and inputBuffer2 that are loaded into shared memory
 // within a workgroup
-var<workgroup> subA: array<f32, 64>;
-var<workgroup> subB: array<f32, 64>;
-
 const block_size : u32 = 8;
+var<workgroup> subA: array<array<f32, block_size>, block_size>;
+var<workgroup> subB: array<array<f32, block_size>, block_size>;
+
 
 @compute @workgroup_size(block_size, block_size, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>,
@@ -25,15 +25,15 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>,
     for(var blockIndex = 0u; blockIndex < matrix_length; blockIndex += block_size) {
         // Load data into shared memory
         // TODO: checks to ensure we don't access out-of-bound elements if matrix is not a multiple of block_size
-        subA[local_id.y * block_size + local_id.x] = inputBuffer1[y * matrix_length + (blockIndex + local_id.x)];
-        subB[local_id.y * block_size + local_id.x] = inputBuffer2[(blockIndex + local_id.y) * matrix_length + x];
+        subA[local_id.y][local_id.x] = inputBuffer1[y * matrix_length + (blockIndex + local_id.x)];
+        subB[local_id.y][local_id.x] = inputBuffer2[(blockIndex + local_id.y) * matrix_length + x];
 
         // Finish for all threads in the workgroup to finish
         workgroupBarrier();
 
         // Dot product on the cached row of subA and cached column of subB
         for(var dotIndex = 0u; dotIndex < block_size; dotIndex += 1) {
-            tmp += subA[local_id.y * block_size + dotIndex] * subB[dotIndex * block_size + local_id.x];
+            tmp += subA[local_id.y][dotIndex] * subB[dotIndex][local_id.x];
         }
 
         // Wait until all threads are done
