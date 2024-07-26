@@ -11,7 +11,7 @@
 #include <vector>
 #include <random>
 
-constexpr uint32_t matrixLength = 1000;
+constexpr uint32_t matrixLength = 1024;
 constexpr bool printMatrices = false;
 
 namespace {
@@ -171,7 +171,7 @@ void Application::onCompute()
 
     // Deduce number of workgroups
     uint32_t invocationCount = m_inputBufferSize / sizeof(float);
-    uint32_t workgroupSize = 8 * 8;
+    uint32_t workgroupSize = 16 * 16;
     uint32_t workgroupCountPerSide = std::ceil(std::sqrt(invocationCount / static_cast<float>(workgroupSize)));
 
     std::cout << "Invocations: " << invocationCount << " Workgroup size: " << workgroupSize << " Workgroup count: "

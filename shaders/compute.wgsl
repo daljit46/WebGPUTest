@@ -7,7 +7,7 @@
 
 // Submatrices of inputBuffer1 and inputBuffer2 that are loaded into shared memory
 // within a workgroup
-const block_size : u32 = 8;
+const block_size : u32 = 16;
 var<workgroup> subA: array<array<f32, block_size>, block_size>;
 var<workgroup> subB: array<array<f32, block_size>, block_size>;
 
